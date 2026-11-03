@@ -138,6 +138,7 @@
     #card{top:auto;bottom:8px;left:8px;right:8px;width:auto}
     dialog{max-width:94vw}
   }
+@media(max-width:700px){#gdTvChart{height:70vh!important;min-height:480px!important}}
 </style>
 </head>
 <body>
@@ -157,7 +158,7 @@
     </datalist>
     <button class="btn" id="go">โหลด</button>
     <button class="btn" id="favBtn" title="เพิ่ม/ลบหุ้นรายการโปรด" aria-label="รายการโปรด">☆</button>
-    <button class="btn" id="keyBtn">API Key</button>
+    <button class="btn" id="keyBtn">API คัดหุ้น</button>
     <button class="btn" id="toolsBtn" aria-label="เครื่องมือ">⚙ เครื่องมือ</button>
   </div>
   <div class="tfs" id="tfs"></div>
@@ -258,12 +259,13 @@
 </div></div>
 
 <div class="view pg" id="vGold" hidden><div class="pgin">
-  <h2>Dashboard ทองคำ <span class="stat">สรุปหลาย Timeframe จาก Twelve Data</span></h2>
+  <h2>Dashboard ทองคำ <span class="stat">กราฟจาก TradingView · ไม่ต้องใช้ API Key</span></h2>
   <div class="row2" style="align-items:center">
-    <select id="gdPick" aria-label="สินทรัพย์"><option value="XAUUSD">XAUUSD ทองคำ</option><option value="XAGUSD">XAGUSD เงิน</option></select>
-    <button class="btn on" id="gdGo">รีเฟรช</button><span class="stat" id="gdMsg"></span>
+    <select id="gdPick" aria-label="สินทรัพย์"><option value="OANDA:XAUUSD" selected>OANDA:XAUUSD ทองคำ</option><option value="OANDA:XAGUSD">OANDA:XAGUSD เงิน</option></select>
+    <select id="gdTf" aria-label="Timeframe"><option value="1m">1m</option><option value="5m" selected>5m</option><option value="15m">15m</option><option value="1h">1h</option><option value="4h">4h</option><option value="1d">1D</option></select>
+    <button class="btn on" id="gdGo">โหลดกราฟใหม่</button><span class="stat" id="gdMsg">ข้อมูลตาม Feed ของ TradingView/OANDA</span>
   </div>
-  <div id="gdOut"></div>
+  <div id="gdTvChart" style="width:100%;height:calc(100vh - 300px);min-height:560px;background:#0d1117;border:1px solid var(--line);border-radius:10px;overflow:hidden"></div>
 </div></div>
 
 <div class="view pg" id="vFav" hidden><div class="pgin">
@@ -633,8 +635,8 @@ function smcAnalyze(d, L, livePrice) {
     if (clean === 'XAGUSD') return 'OANDA:XAGUSD';
     return clean.includes(':') ? clean : clean;
   }
-  function renderTradingView(){
-    const host = $('tvChart');
+  function renderTradingView(hostId = 'tvChart', symbol = state.symbol, interval = state.tf){
+    const host = $(hostId);
     if (!host) return;
     host.innerHTML = '';
     const shell = document.createElement('div');
@@ -654,55 +656,36 @@ function smcAnalyze(d, L, livePrice) {
     script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
     script.text = JSON.stringify({
       autosize: true,
-      symbol: tradingViewSymbol(state.symbol),
-      interval: TV_INTERVAL[state.tf] || '5',
+      symbol: tradingViewSymbol(symbol),
+      interval: TV_INTERVAL[interval] || '5',
       timezone: 'Asia/Bangkok',
       theme: 'dark',
       style: '1',
       locale: 'en',
       allow_symbol_change: true,
       calendar: false,
+      hide_side_toolbar: false,
+      withdateranges: true,
+      studies: ['STD;Volume', 'STD;RSI', 'STD;MACD'],
       support_host: 'https://www.tradingview.com'
     });
-    shell.append(widget, note, script); host.appendChild(shell);
-    $('stxt').textContent = 'กราฟจาก TradingView · ' + tradingViewSymbol(state.symbol);
-    $('dot').className = 'live';
+    shell.append(widget, note, script);
+    host.appendChild(shell);
+    if (hostId === 'tvChart') {
+      $('stxt').textContent = 'กราฟจาก TradingView · ' + tradingViewSymbol(symbol);
+      $('dot').className = 'live';
+    }
   }
 
   async function load(){
-    renderTradingView();
     const my = ++gen;
-    closeWS(); clearInterval(tickerTimer); noRetry = false;
+    closeWS(); clearInterval(tickerTimer); noRetry = true;
+    renderTradingView('tvChart', state.symbol, state.tf);
     loadDrawings();
-    if (isGold(state.symbol)) return loadGold(my);
-    if (!cred.key || !cred.secret){ setStatus('live','กราฟ TradingView · ไม่ต้องใช้ API Key'); return; }
-    setStatus('wait','กำลังโหลดข้อมูล');
-    try {
-      const start = new Date(Date.now() - DAYS[state.tf]*864e5).toISOString();
-      const url = `${HOST}${encodeURIComponent(state.symbol)}/bars?timeframe=${ALP[state.tf]}&start=${encodeURIComponent(start)}&limit=1000&sort=desc&adjustment=split&feed=${cred.feed}`;
-      const r = await fetch(url, { headers: hdr() });
-      if (!r.ok){
-        let m = 'HTTP ' + r.status;
-        if (r.status===401 || r.status===403) m = 'API Key ไม่ถูกต้องหรือไม่มีสิทธิ์ใช้ฟีดนี้ ('+r.status+')';
-        else if (r.status===404 || r.status===422) m = 'ไม่พบชื่อย่อหุ้นนี้';
-        else if (r.status===429) m = 'เรียกถี่เกินไป รอสักครู่แล้วลองใหม่';
-        throw new Error(m);
-      }
-      const j = await r.json();
-      if (my !== gen) return;
-      const raw = (j.bars || []).slice().reverse();
-      if (!raw.length) throw new Error('ไม่พบข้อมูลของ ' + state.symbol + ' (ตรวจชื่อย่อหุ้น)');
-      candles = raw.map(b => ({ time:toT(Date.parse(b.t)), open:b.o, high:b.h, low:b.l, close:b.c, volume:b.v }));
-      dec = decimals(candles[candles.length-1].close);
-      [candle,sEma20,sEma50,sEma200,sBbU,sBbM,sBbL].forEach(s => s.applyOptions({ priceFormat:{ type:'price', precision:dec, minMove:Math.pow(10,-dec) } }));
-      render(true);
-      connect(my);
-      loadTicker(my);
-      tickerTimer = setInterval(() => loadTicker(my), 15000);
-    } catch(e){
-      if (my !== gen) return;
-      setStatus('err', e instanceof TypeError ? 'เชื่อมต่อ Alpaca ไม่ได้ (เช็กอินเทอร์เน็ต หรือเบราว์เซอร์บล็อก CORS)' : 'โหลดไม่สำเร็จ: ' + e.message);
-    }
+    candles = [];
+    setStatus('live', 'กราฟ TradingView · ไม่เรียก Alpaca หรือ Twelve Data');
+    // TradingView widget provides its own market data; no external market-data API is called here.
+    return;
   }
 
   function connect(my){
@@ -1602,8 +1585,15 @@ function smcAnalyze(d, L, livePrice) {
       ${conf.length ? '<table class="tbl"><tr><th>โซนราคา</th><th>TF</th><th>ชนิดเส้น</th><th>ห่างจากราคา</th></tr>' + conf.map(z => { const m = (z.lo + z.hi) / 2; return `<tr><td><b>${fmt(z.lo, d(z.lo))}${z.hi - z.lo > 0.005 ? ' – ' + fmt(z.hi, d(z.hi)) : ''}</b></td><td>${z.tfs}</td><td>${z.types}</td><td class="${m > h1.last ? 'down' : 'up'}">${m > h1.last ? 'ต้านเหนือ ' : 'รับใต้ '}${(Math.abs(m - h1.last) / h1.last * 100).toFixed(2)}%</td></tr>`; }).join('') + '</table>' : '<p class="stat">ยังไม่พบเส้น SnR ที่ซ้อนกันข้าม TF ในระยะใกล้ราคา</p>'}
       <p class="warn">สรุปนี้คำนวณจากราคาปิดด้วยกฎ SnR (A/V), PO3/Goldbach และ EMA20/50 แบบอัตโนมัติ ไม่ใช่คำแนะนำการลงทุน แนวโน้มคือราคา &gt; EMA20 &gt; EMA50 (ขึ้น) หรือกลับกัน (ลง) นอกเหนือจากนั้นนับเป็น "ผสม" เส้น SnR สูงสุด 8 เส้นต่อ TF ที่ใกล้ราคาที่สุด</p>`;
   }
-  $('gdGo').onclick = () => goldDash(true);
-  $('gdPick').onchange = () => goldDash(true);
+  function renderGoldChart(){
+    const sym = $('gdPick')?.value || 'OANDA:XAUUSD';
+    const tf = $('gdTf')?.value || '5m';
+    renderTradingView('gdTvChart', sym, tf);
+    if ($('gdMsg')) $('gdMsg').textContent = 'TradingView · ' + sym + ' · ' + tf + ' · ไม่เรียก Alpaca/Twelve Data';
+  }
+  $('gdGo').onclick = renderGoldChart;
+  $('gdPick').onchange = renderGoldChart;
+  $('gdTf').onchange = renderGoldChart;
   $('gdOut').addEventListener('click', e => {
     const tf = e.target.dataset.gt; if (!tf) return;
     state.symbol = gd.sym; state.tf = tf; save(); syncUI(); showView('vChart'); load(); refreshStar();
@@ -1650,7 +1640,7 @@ function smcAnalyze(d, L, livePrice) {
     $('nav').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === id));
     if (id === 'vChart') setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 80);
     if (id === 'vFav') loadFavs();
-    if (id === 'vGold') goldDash(false);
+    if (id === 'vGold') { renderGoldChart(); setTimeout(() => window.dispatchEvent(new Event('resize')), 120); }
   }
   $('nav').addEventListener('click', e => { const b = e.target.closest('button[data-v]'); if (b) showView(b.dataset.v); });
   function openChart(sym){ state.symbol = sym; save(); syncUI(); showView('vChart'); load(); refreshStar(); }
