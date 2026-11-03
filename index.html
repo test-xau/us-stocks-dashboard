@@ -1,0 +1,1834 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="US Stocks">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>US Stocks Dashboard</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#131a23; --line:#232c38; --text:#d8dee8; --mute:#7e8a9a;
+    --up:#2ebd9b; --down:#ef5b5b; --accent:#e9b949;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI","Noto Sans Thai",sans-serif;display:flex;flex-direction:column}
+  button,input,select{font:inherit;color:inherit}
+  header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+  .sym{display:flex;gap:6px;align-items:center}
+  .sym input,.sym select,.tools select{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+  .sym input{width:110px;text-transform:uppercase}
+  .btn{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--mute)}
+  .btn.mini{padding:1px 8px;font-size:12px}
+  .btn:disabled{opacity:.4;cursor:default}
+  .btn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .tfs{display:flex;gap:4px}
+  .tfs .btn{padding:5px 9px}
+  .btn.on{background:var(--accent);color:#14110a;border-color:var(--accent);font-weight:600}
+  .price{display:flex;align-items:baseline;gap:12px;margin-left:auto}
+  #last{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+  #chg{font-variant-numeric:tabular-nums}
+  .up{color:var(--up)} .down{color:var(--down)}
+  .stat{color:var(--mute);font-size:12px;font-variant-numeric:tabular-nums}
+  #status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mute)}
+  #dot{width:8px;height:8px;border-radius:50%;background:var(--mute)}
+  #dot.live{background:var(--up)} #dot.err{background:var(--down)} #dot.wait{background:var(--accent)}
+  .tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:6px 14px;border-bottom:1px solid var(--line);background:var(--bg)}
+  .grp{color:var(--mute);font-size:12px;min-width:54px}
+  .chk{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+  .sw{width:10px;height:10px;border-radius:2px;display:inline-block}
+  .dtools{display:flex;flex-wrap:wrap;gap:6px}
+  #wrap{flex:1;min-height:0;display:flex;flex-direction:column}
+  .panel{position:relative;min-height:0;border-top:1px solid var(--line)}
+  .panel:first-child{border-top:0}
+  #mainP{flex:5} #rsiP{flex:2} #macdP{flex:2.5}
+  .chart{position:absolute;inset:0}
+  #main.draw, #main.draw *{cursor:crosshair !important}
+  #ov{position:absolute;left:0;top:0;pointer-events:none;z-index:4}
+  .tag{position:absolute;top:6px;left:10px;z-index:5;pointer-events:none;font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
+  .tag b{color:var(--text);font-weight:600}
+  #card{position:absolute;top:30px;right:84px;z-index:6;width:236px;background:rgba(19,26,35,.93);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px}
+  #card .ch{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+  #card .row{display:flex;justify-content:space-between;gap:8px;padding:1px 0;font-variant-numeric:tabular-nums}
+  #card .row>span:first-child{color:var(--mute)}
+  #card .row>span:last-child,#card .row>b{text-align:right}
+  #card .note{color:var(--mute);font-size:11px;margin-top:6px;line-height:1.35}
+  @media (max-width:700px){ .price{margin-left:0;width:100%} #card{width:200px;right:76px} }
+  dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:18px 20px;width:min(440px,92vw)}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  dialog h3{margin:0 0 6px}
+  dialog label{display:block;margin:10px 0 0;font-size:13px;color:var(--mute)}
+  dialog input,dialog select{display:block;width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;color:var(--text)}
+  dialog .acts{display:flex;gap:8px;margin-top:16px}
+  dialog p{margin:6px 0;font-size:12.5px;color:var(--mute);line-height:1.5}
+
+  [hidden]{display:none!important}
+  #nav{display:flex;gap:2px;padding:0 10px;background:var(--panel);border-bottom:1px solid var(--line)}
+  #nav button{background:none;border:0;border-bottom:2px solid transparent;padding:10px 16px;cursor:pointer;color:var(--mute);font-weight:600}
+  #nav button:hover{color:var(--text)}
+  #nav button.on{color:var(--accent);border-bottom-color:var(--accent)}
+  #nav .cnt{font-size:11px;background:var(--line);border-radius:9px;padding:0 6px;margin-left:5px;color:var(--text)}
+  .view{flex:1;min-height:0;display:flex;flex-direction:column}
+  .pg{overflow:auto}
+  .pgin{padding:16px 18px;max-width:1100px;width:100%;margin:0 auto}
+  .pgin h2{margin:0 0 4px;font-size:17px}
+  .pgin h3{margin:18px 0 6px;font-size:14px;color:var(--accent)}
+  .row2{display:flex;gap:8px;margin:10px 0;align-items:flex-start}
+  .pgin textarea,.pgin input{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%;color:var(--text)}
+  .pgin textarea{resize:vertical;font:13px/1.5 inherit}
+  .row2 input{text-transform:uppercase}
+  .tbl{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+  .tbl th{color:var(--mute);font-weight:500;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  .tbl td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  .tbl tr.top td{background:rgba(233,185,73,.07)}
+  .tbl .tk{font-weight:700;color:var(--text);cursor:pointer}
+  .tag2{display:inline-block;font-size:11px;border:1px solid var(--line);border-radius:9px;padding:0 7px;margin:1px 3px 1px 0;color:var(--mute)}
+  .star{background:none;border:0;cursor:pointer;font-size:17px;color:var(--mute);padding:0 4px}
+  .star.on{color:var(--accent)}
+  .scorebar{display:inline-block;height:6px;border-radius:3px;background:var(--up);vertical-align:middle;margin-right:6px}
+  .pgin details{margin-top:18px} .pgin summary{cursor:pointer;color:var(--accent);margin-bottom:6px}
+  .warn{color:var(--mute);font-size:12px;margin-top:10px;line-height:1.5}
+  .pgin select{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 8px;color:var(--text);width:auto}
+  #toasts{position:fixed;top:48px;right:14px;z-index:50;display:flex;flex-direction:column;gap:8px;width:min(320px,90vw)}
+  .toast{background:var(--panel);border:1px solid var(--accent);border-left:4px solid var(--accent);border-radius:8px;padding:9px 12px;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.5);font-size:13px}
+  .toast b{color:var(--accent)}
+  .cards{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+  .card2{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;min-width:150px;flex:1}
+  .card2 b{display:block;font-size:20px;margin-top:2px}
+  .ni{display:none;font-style:normal}
+  #toolsBtn{display:none}
+  #nav .cnt{font-weight:400}
+  @media (max-width:760px){
+    body{height:100dvh}
+    #nav{order:99;border-top:1px solid var(--line);border-bottom:0;padding:0 0 env(safe-area-inset-bottom);justify-content:space-around}
+    #nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 2px;font-size:11px;border-bottom:0;border-top:2px solid transparent}
+    #nav button.on{border-top-color:var(--accent)}
+    .ni{display:block;font-size:20px;line-height:1.15}
+    header{flex-wrap:wrap;gap:6px;padding:max(8px,env(safe-area-inset-top)) 10px 6px}
+    .sym{width:100%;display:flex;gap:6px}
+    #symbol{flex:1;min-width:0;font-size:16px}
+    #go,#keyBtn{display:none}
+    #toolsBtn{display:inline-block}
+    .tfs{display:flex;overflow-x:auto;white-space:nowrap;width:100%;gap:4px;-webkit-overflow-scrolling:touch}
+    .tfs *{flex:none}
+    .price{width:100%;display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+    #last{font-size:22px;font-weight:700}
+    .btn{padding:8px 12px}
+    body:not(.tools-open) .tools{display:none}
+    .tools{flex-wrap:nowrap;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;padding:6px 10px}
+    .tools>*,.dtools{flex:none}
+    .dtools{flex-wrap:nowrap}
+    .chk{padding:6px 4px}
+    .pgin{padding:12px 12px 20px}
+    .pgin .tbl{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}
+    .row2{flex-wrap:wrap}
+    #toasts{top:max(8px,env(safe-area-inset-top));right:8px;left:8px;width:auto}
+    #card{top:auto;bottom:8px;left:8px;right:8px;width:auto}
+    dialog{max-width:94vw}
+  }
+</style>
+</head>
+<body>
+<nav id="nav">
+  <button data-v="vChart" class="on"><i class="ni">📈</i><span>กราฟ</span></button>
+  <button data-v="vScr"><i class="ni">🔍</i><span>คัดหุ้น</span></button>
+  <button data-v="vGold"><i class="ni">🥇</i><span>ทองคำ</span></button>
+  <button data-v="vFav"><i class="ni">⭐</i><span>รายการโปรด<b class="cnt" id="favCnt">0</b></span></button>
+</nav>
+<div class="view" id="vChart">
+<header>
+  <div class="sym">
+    <input id="symbol" list="symbols" value="AAPL" aria-label="ชื่อย่อหุ้น" spellcheck="false">
+    <datalist id="symbols">
+      <option value="AAPL"><option value="NVDA"><option value="TSLA"><option value="MSFT"><option value="AMD">
+      <option value="SPY"><option value="QQQ"><option value="CRDO"><option value="MGNI"><option value="AXTI"><option value="AMPL">
+    </datalist>
+    <button class="btn" id="go">โหลด</button>
+    <button class="btn" id="favBtn" title="เพิ่ม/ลบหุ้นรายการโปรด" aria-label="รายการโปรด">☆</button>
+    <button class="btn" id="keyBtn">API Key</button>
+    <button class="btn" id="toolsBtn" aria-label="เครื่องมือ">⚙ เครื่องมือ</button>
+  </div>
+  <div class="tfs" id="tfs"></div>
+  <div class="price">
+    <span id="last">-</span>
+    <span id="chg">-</span>
+    <span class="stat" id="hl"></span>
+    <span id="status"><i id="dot"></i><span id="stxt">กำลังเชื่อมต่อ</span></span>
+  </div>
+</header>
+
+<div class="tools" id="tools">
+  <span class="grp">ตัวชี้วัด</span>
+  <label class="chk"><input type="checkbox" data-ind="ema20"><i class="sw" style="background:#e9b949"></i>EMA 20</label>
+  <label class="chk"><input type="checkbox" data-ind="ema50"><i class="sw" style="background:#4da3ff"></i>EMA 50</label>
+  <label class="chk"><input type="checkbox" data-ind="ema200"><i class="sw" style="background:#c678dd"></i>EMA 200</label>
+  <label class="chk"><input type="checkbox" data-ind="bb"><i class="sw" style="background:#8a94a6"></i>Bollinger (20,2)</label>
+  <label class="chk"><input type="checkbox" data-ind="vol"><i class="sw" style="background:#3b4a5e"></i>Volume</label>
+  <label class="chk"><input type="checkbox" data-ind="rsi"><i class="sw" style="background:#e07a5f"></i>RSI (14)</label>
+  <label class="chk"><input type="checkbox" data-ind="macd"><i class="sw" style="background:#4da3ff"></i>MACD (12,26,9)</label>
+</div>
+
+<div class="tools" id="smcTools">
+  <span class="grp">SMC</span>
+  <label class="chk"><input type="checkbox" data-smc="struct"><i class="sw" style="background:#2ebd9b"></i>BOS / CHoCH</label>
+  <label class="chk"><input type="checkbox" data-smc="ob"><i class="sw" style="background:#2ebd9b;opacity:.55"></i>Order Block</label>
+  <label class="chk"><input type="checkbox" data-smc="fvg"><i class="sw" style="background:#4da3ff;opacity:.7"></i>FVG</label>
+  <label class="chk"><input type="checkbox" data-smc="liq"><i class="sw" style="background:#e9b949"></i>Liquidity (EQH/EQL)</label>
+  <label class="chk"><input type="checkbox" data-smc="pd"><i class="sw" style="background:#7e8a9a"></i>Premium / Discount</label>
+  <label class="chk"><input type="checkbox" data-smc="sr"><i class="sw" style="background:#ef5b5b;opacity:.7"></i>แนวรับ / แนวต้าน</label>
+  <label class="chk"><input type="checkbox" data-smc="sig"><i class="sw" style="background:#fff;opacity:.8"></i>Entry · SL · TP</label>
+  <label class="chk">Swing
+    <select id="swing" aria-label="ความไวของ swing">
+      <option value="3">3 (ไว)</option><option value="5">5</option><option value="8">8</option><option value="12">12 (ช้า)</option>
+    </select>
+  </label>
+</div>
+
+<div class="tools" id="ictTools">
+  <span class="grp">ICT</span>
+  <label class="chk"><input type="checkbox" data-ict="gb"><i class="sw" style="background:#4da3ff"></i>PO3 + Goldbach (IPDA)</label>
+  <label class="chk"><input type="checkbox" data-ict="erd"><i class="sw" style="background:#e9b949"></i>External Range (±11.1%)</label>
+  <label class="chk"><input type="checkbox" data-ict="lb"><i class="sw" style="background:#c678dd"></i>20-40-60 Lookback</label>
+  <label class="chk"><input type="checkbox" data-ict="snr"><i class="sw" style="background:#2ebd9b"></i>SnR (A/V · RBS/SBR)</label>
+  <label class="chk"><input type="checkbox" data-ict="ocl"><i class="sw" style="background:#8e6bd8"></i>OCL Gap</label>
+  <label class="chk"><input type="checkbox" data-ict="tl"><i class="sw" style="background:#e9b949"></i>Trendline + Power of X</label>
+  <label class="chk"><input type="checkbox" data-ict="ifvg"><i class="sw" style="background:#ff9f43"></i>IFVG / BPR / CE</label>
+  <label class="chk">ขนาด PO3
+    <select id="ictN" aria-label="ขนาด PO3">
+      <option value="auto">Auto</option><option value="3">3</option><option value="9">9</option><option value="27">27</option><option value="81">81</option><option value="243">243</option><option value="729">729</option><option value="2187">2187</option>
+    </select>
+  </label>
+</div>
+
+<div class="tools" id="drawTools">
+  <span class="grp">วาดกราฟ</span>
+  <div class="dtools">
+    <button class="btn" data-tool="select">เลือก</button>
+    <button class="btn" data-tool="hline">เส้นแนวนอน</button>
+    <button class="btn" data-tool="trend">เทรนด์ไลน์</button>
+    <button class="btn" data-tool="fib">Fib Retracement</button>
+    <button class="btn" data-tool="fibext">Fib Extension</button>
+    <button class="btn" data-tool="pos">Long/Short R:R</button>
+  </div>
+  <label class="chk"><input type="checkbox" id="magnet">Magnet (ดูด OHLC)</label>
+  <div class="dtools">
+    <button class="btn" id="delSel" disabled>ลบที่เลือก</button>
+    <button class="btn" id="undo">ย้อนกลับ</button>
+    <button class="btn" id="clearAll">ล้างทั้งหมด</button>
+  </div>
+  <span class="stat" id="hint"></span>
+</div>
+
+
+<div id="wrap">
+  <div class="panel" id="mainP">
+    <div class="tag" id="mainTag"></div>
+    <div class="chart" id="main"></div>
+    <canvas id="ov"></canvas>
+    <div id="card"></div>
+  </div>
+  <div class="panel" id="rsiP"><div class="tag" id="rsiTag">RSI 14</div><div class="chart" id="rsi"></div></div>
+  <div class="panel" id="macdP"><div class="tag" id="macdTag">MACD</div><div class="chart" id="macd"></div></div>
+</div>
+
+</div>
+
+<div class="view pg" id="vScr" hidden><div class="pgin">
+  <h2>คัดหุ้น Swing Trade (1-3 เดือน)</h2>
+  <div class="stat">ใส่ชื่อย่อหุ้นที่มีโมเมนตัมขาขึ้น คั่นด้วยคอมมา ระบบดึงราคารายวันจาก Alpaca เทียบกับ SPY แล้วจัดอันดับ เลือก 2 ตัวที่ดีที่สุด</div>
+  <div class="row2"><textarea id="scrIn" rows="2" spellcheck="false" placeholder="PLTR, CELH, AMD, NET"></textarea><button class="btn on" id="scrGo">คัดหุ้น</button></div>
+  <div id="scrOut"></div>
+  <details open><summary>Prompt: Hedge Fund Swing Trader (สำหรับวิเคราะห์ Catalyst / Short Interest ต่อ)</summary>
+    <textarea id="scrPrompt" rows="14" readonly></textarea>
+    <div class="row2"><button class="btn" id="copyP">คัดลอก prompt</button><span class="stat" id="copyMsg"></span></div>
+  </details>
+</div></div>
+
+<div class="view pg" id="vGold" hidden><div class="pgin">
+  <h2>Dashboard ทองคำ <span class="stat">สรุปหลาย Timeframe จาก Twelve Data</span></h2>
+  <div class="row2" style="align-items:center">
+    <select id="gdPick" aria-label="สินทรัพย์"><option value="XAUUSD">XAUUSD ทองคำ</option><option value="XAGUSD">XAGUSD เงิน</option></select>
+    <button class="btn on" id="gdGo">รีเฟรช</button><span class="stat" id="gdMsg"></span>
+  </div>
+  <div id="gdOut"></div>
+</div></div>
+
+<div class="view pg" id="vFav" hidden><div class="pgin">
+  <h2>หุ้นรายการโปรด</h2>
+  <div class="row2"><input id="favIn" placeholder="เพิ่มชื่อย่อหุ้น เช่น NVDA" spellcheck="false" style="max-width:240px"><button class="btn on" id="favAdd">เพิ่ม</button></div>
+  <div class="row2" style="align-items:center;flex-wrap:wrap">
+    <span class="stat">แจ้งเตือนเมื่อราคาห่างจาก Entry ไม่เกิน</span>
+    <select id="thr" aria-label="ระยะแจ้งเตือน"><option value="0.5">0.5%</option><option value="1">1%</option><option value="2">2%</option><option value="3">3%</option></select>
+    <button class="btn" id="notiBtn">เปิดแจ้งเตือนบนเบราว์เซอร์</button>
+    <span class="stat">ใส่ราคา Entry ในช่องของแต่ละตัว ต้องเปิดหน้านี้ค้างไว้ (แท็บใดก็ได้) จึงจะเช็กราคาทุก 15 วินาที</span>
+  </div>
+  <details><summary>แจ้งเตือนผ่านเซิร์ฟเวอร์ (ไม่ต้องเปิดคอมค้าง)</summary>
+    <div class="row2"><input id="srvUrl" placeholder="https://entry-alerts.xxx.workers.dev" style="text-transform:none" spellcheck="false"><input id="srvTok" type="password" placeholder="SYNC_TOKEN" style="max-width:200px;text-transform:none"><button class="btn" id="srvSave">บันทึกและซิงก์</button></div>
+    <div class="stat" id="srvMsg"></div>
+  </details>
+  <div id="favOut"></div>
+</div></div>
+
+<dialog id="keyDlg">
+  <h3>ตั้งค่า Alpaca Market Data</h3>
+  <p>สมัครบัญชี Paper (ฟรี) ที่ alpaca.markets แล้วสร้าง API Key ในหน้า Paper Trading ไม่ต้องเติมเงิน ใช้ดึงราคาอย่างเดียว คีย์จะเก็บไว้ในเบราว์เซอร์เครื่องนี้เท่านั้น ไม่ถูกส่งไปที่อื่นนอกจาก Alpaca</p>
+  <label>API Key ID<input id="kKey" autocomplete="off" spellcheck="false"></label>
+  <label>Secret Key<input id="kSec" type="password" autocomplete="off" spellcheck="false"></label>
+  <label>ฟีดข้อมูล
+    <select id="kFeed">
+      <option value="iex">IEX (ฟรี · เรียลทามแต่เป็นเฉพาะตลาด IEX)</option>
+      <option value="sip">SIP (ครบทุกตลาด · ต้องใช้แผนเสียเงินของ Alpaca)</option>
+    </select>
+  </label>
+  <label>Twelve Data API Key (ใช้กับทองคำ XAUUSD / XAGUSD เท่านั้น)<input id="kTd" type="password" autocomplete="off" spellcheck="false" placeholder="ไม่ใส่ก็ได้ ถ้าไม่ดูทองคำ"></label>
+  <p class="stat">สมัครฟรีที่ twelvedata.com แล้วคัดลอก API Key จากหน้า Dashboard คีย์นี้ถูกส่งไปที่ api.twelvedata.com เท่านั้น แผนฟรีจำกัดจำนวนครั้งเรียกต่อนาทีและต่อวัน</p>
+  <div class="acts">
+    <button class="btn on" id="kSave">บันทึกและเชื่อมต่อ</button>
+    <button class="btn" id="kClose">ปิด</button>
+    <button class="btn" id="kClear">ลบคีย์</button>
+  </div>
+</dialog>
+<div id="toasts" aria-live="polite"></div>
+
+<!-- ===================== SMC engine (pure functions) ===================== -->
+<script id="engine">
+function atrCalc(d, p) {
+  p = p || 14;
+  const out = new Array(d.length).fill(null);
+  if (d.length <= p) return out;
+  let sum = 0, a = null;
+  for (let i = 1; i < d.length; i++) {
+    const t = Math.max(d[i].high - d[i].low, Math.abs(d[i].high - d[i-1].close), Math.abs(d[i].low - d[i-1].close));
+    if (i <= p) { sum += t; if (i === p) { a = sum / p; out[i] = a; } }
+    else { a = (a * (p - 1) + t) / p; out[i] = a; }
+  }
+  return out;
+}
+
+// pick TP candidates from swing levels, require R:R >= 1.5
+function smcTargets(dir, entry, risk, swH, swL) {
+  const c = dir === 1
+    ? swH.filter(s => s.price > entry).map(s => s.price).sort((x, y) => x - y)
+    : swL.filter(s => s.price < entry).map(s => s.price).sort((x, y) => y - x);
+  const ok = c.filter(p => Math.abs(p - entry) / risk >= 1.5);
+  if (!ok.length) return null;
+  const tp1 = ok[0];
+  const far = ok.filter(p => Math.abs(p - tp1) >= 0.5 * risk)[0];
+  const tp2 = far !== undefined ? far
+    : (dir === 1 ? Math.max(entry + 3 * risk, tp1 + risk) : Math.min(entry - 3 * risk, tp1 - risk));
+  return { tp1, tp2 };
+}
+
+// d: CLOSED candles only. L: swing length. livePrice: current price.
+function smcAnalyze(d, L, livePrice) {
+  const n = d.length;
+  const R = { events: [], obs: [], fvgs: [], eq: [], sr: [], signals: [], range: null, trend: 0, atr: 0, plan: null,
+              stats: { win: 0, loss: 0, open: 0, r: 0 } };
+  if (n < L * 2 + 30) return R;
+
+  const H = d.map(c => c.high), Lo = d.map(c => c.low), C = d.map(c => c.close);
+  const atr = atrCalc(d, 14);
+  let A = atr[n-1] || (H[n-1] - Lo[n-1]) || 1;
+  R.atr = A;
+
+  const sufH = new Array(n + 1).fill(-Infinity), sufL = new Array(n + 1).fill(Infinity);
+  for (let i = n - 1; i >= 0; i--) { sufH[i] = Math.max(H[i], sufH[i+1]); sufL[i] = Math.min(Lo[i], sufL[i+1]); }
+
+  let top = null, bot = null, trend = 0, lastH = null, lastL = null;
+  const swH = [], swL = [], obs = [], fvgs = [], events = [], signals = [];
+
+  for (let j = 0; j < n; j++) {
+    const a = atr[j] || A;
+
+    // 1) confirm swing pivot at p = j - L
+    const p = j - L;
+    if (p >= L) {
+      let isH = true, isL = true;
+      for (let k = p - L; k <= p + L; k++) {
+        if (k === p) continue;
+        if (k < p) { if (H[k] >= H[p]) isH = false; if (Lo[k] <= Lo[p]) isL = false; }
+        else       { if (H[k] >  H[p]) isH = false; if (Lo[k] <  Lo[p]) isL = false; }
+      }
+      if (isH) { const s = { idx: p, price: H[p], crossed: false }; swH.push(s); top = s; lastH = s; }
+      if (isL) { const s = { idx: p, price: Lo[p], crossed: false }; swL.push(s); bot = s; lastL = s; }
+    }
+
+    // 2) mitigation (close through the zone)
+    for (const o of obs) {
+      if (!o.active || o.born >= j) continue;
+      if (o.dir === 1 ? C[j] < o.bottom : C[j] > o.top) { o.active = false; o.mit = j; }
+    }
+    for (const g of fvgs) {
+      if (!g.active || g.idx + 1 >= j) continue;
+      if (g.dir === 1 ? C[j] < g.bottom : C[j] > g.top) { g.active = false; g.mit = j; }
+    }
+
+    // 3) structure breaks (close beyond swing) -> BOS / CHoCH + order block
+    if (top && !top.crossed && C[j] > top.price) {
+      top.crossed = true;
+      events.push({ type: trend === -1 ? 'CHoCH' : 'BOS', dir: 1, from: top.idx, to: j, price: top.price });
+      trend = 1;
+      let mi = top.idx;
+      for (let k = top.idx; k <= j; k++) if (Lo[k] < Lo[mi]) mi = k;
+      obs.push({ dir: 1, top: H[mi], bottom: Lo[mi], idx: mi, born: j, active: true, signaled: false });
+    }
+    if (bot && !bot.crossed && C[j] < bot.price) {
+      bot.crossed = true;
+      events.push({ type: trend === 1 ? 'CHoCH' : 'BOS', dir: -1, from: bot.idx, to: j, price: bot.price });
+      trend = -1;
+      let mi = bot.idx;
+      for (let k = bot.idx; k <= j; k++) if (H[k] > H[mi]) mi = k;
+      obs.push({ dir: -1, top: H[mi], bottom: Lo[mi], idx: mi, born: j, active: true, signaled: false });
+    }
+
+    // 4) fair value gaps
+    if (j >= 2) {
+      if (Lo[j] > H[j-2] && (Lo[j] - H[j-2]) > 0.15 * a)
+        fvgs.push({ dir: 1, top: Lo[j], bottom: H[j-2], idx: j - 1, active: true });
+      else if (H[j] < Lo[j-2] && (Lo[j-2] - H[j]) > 0.15 * a)
+        fvgs.push({ dir: -1, top: Lo[j-2], bottom: H[j], idx: j - 1, active: true });
+    }
+
+    // 5) entry signals: price taps an unmitigated OB in the direction of structure and closes back out
+    if (trend !== 0 && lastH && lastL && lastH.price > lastL.price) {
+      const eq = (lastH.price + lastL.price) / 2;
+      for (const o of obs) {
+        if (!o.active || o.signaled || o.dir !== trend || o.born >= j) continue;
+        let ok = false;
+        if (trend === 1)  ok = Lo[j] <= o.top && C[j] > o.top && C[j] <= eq;       // discount only
+        if (trend === -1) ok = H[j] >= o.bottom && C[j] < o.bottom && C[j] >= eq;  // premium only
+        if (!ok) continue;
+        const entry = C[j];
+        const sl = trend === 1 ? o.bottom - 0.25 * a : o.top + 0.25 * a;
+        const risk = Math.abs(entry - sl);
+        if (!(risk > 0)) continue;
+        const t = smcTargets(trend, entry, risk, swH, swL);
+        if (!t) continue;
+        o.signaled = true;
+        signals.push({ idx: j, dir: trend, entry, sl, tp1: t.tp1, tp2: t.tp2, rr: Math.abs(t.tp1 - entry) / risk });
+      }
+    }
+  }
+
+  // outcome of every signal (SL checked first when both are hit in one bar = conservative)
+  for (const s of signals) {
+    s.res = 'open';
+    for (let k = s.idx + 1; k < n; k++) {
+      const hitSL = s.dir === 1 ? Lo[k] <= s.sl : H[k] >= s.sl;
+      const hitTP = s.dir === 1 ? H[k] >= s.tp1 : Lo[k] <= s.tp1;
+      if (hitSL) { s.res = 'loss'; s.end = k; break; }
+      if (hitTP) { s.res = 'win';  s.end = k; break; }
+    }
+    if (s.res === 'win') { R.stats.win++; R.stats.r += s.rr; }
+    else if (s.res === 'loss') { R.stats.loss++; R.stats.r -= 1; }
+    else R.stats.open++;
+  }
+  R.signals = signals.slice(-20);
+
+  R.trend = trend;
+  R.events = events.slice(-14);
+  R.obs = obs.filter(o => o.active && o.dir === 1).slice(-4).concat(obs.filter(o => o.active && o.dir === -1).slice(-4));
+  R.fvgs = fvgs.filter(g => g.active && g.dir === 1).slice(-5).concat(fvgs.filter(g => g.active && g.dir === -1).slice(-5));
+  if (lastH && lastL && lastH.price > lastL.price) R.range = { hi: lastH, lo: lastL };
+
+  // equal highs / equal lows that have not been swept yet
+  const tol = 0.25 * A;
+  const scan = (sw, isHigh) => {
+    const arr = sw.slice(-30), found = [];
+    for (let k = arr.length - 1; k >= 1 && found.length < 3; k--) {
+      for (let i = k - 1; i >= Math.max(0, k - 10); i--) {
+        if (arr[k].idx - arr[i].idx < L * 2) continue;
+        if (Math.abs(arr[k].price - arr[i].price) > tol) continue;
+        const lvl = isHigh ? Math.max(arr[k].price, arr[i].price) : Math.min(arr[k].price, arr[i].price);
+        const swept = isHigh ? sufH[arr[i].idx + 1] > lvl : sufL[arr[i].idx + 1] < lvl;
+        if (swept) continue;
+        if (found.some(f => Math.abs(f.price - lvl) < tol / 2)) continue;
+        found.push({ dir: isHigh ? 1 : -1, price: lvl, i1: arr[i].idx, i2: arr[k].idx });
+        break;
+      }
+    }
+    return found;
+  };
+  R.eq = scan(swH, true).concat(scan(swL, false));
+
+  // support / resistance = clusters of swing points touched at least twice
+  const price = livePrice != null ? livePrice : C[n-1];
+  const pts = swH.slice(-40).map(s => s.price).concat(swL.slice(-40).map(s => s.price)).sort((x, y) => x - y);
+  const clusters = [];
+  for (const pr of pts) {
+    const last = clusters[clusters.length - 1];
+    if (last && pr - last.max <= 0.5 * A) { last.sum += pr; last.n++; last.max = pr; }
+    else clusters.push({ sum: pr, n: 1, max: pr });
+  }
+  const levels = clusters.map(c => ({ price: c.sum / c.n, touches: c.n })).filter(l => l.touches >= 2);
+  const above = levels.filter(l => l.price > price).sort((x, y) => x.price - y.price).slice(0, 3).map(l => ({ ...l, kind: 'R' }));
+  const below = levels.filter(l => l.price <= price).sort((x, y) => y.price - x.price).slice(0, 3).map(l => ({ ...l, kind: 'S' }));
+  R.sr = above.concat(below);
+
+  // trade plan: an open signal (recent) or a pending setup at the nearest OB
+  const open = signals.filter(s => s.res === 'open' && n - 1 - s.idx <= 100).pop();
+  if (open) {
+    R.plan = { kind: 'signal', dir: open.dir, entry: open.entry, sl: open.sl, tp1: open.tp1, tp2: open.tp2, rr: open.rr, start: open.idx };
+  } else if (trend !== 0) {
+    const cand = obs.filter(o => o.active && o.dir === trend && (trend === 1 ? o.bottom < price : o.top > price));
+    if (cand.length) {
+      const o = trend === 1 ? cand.reduce((m, x) => x.top > m.top ? x : m) : cand.reduce((m, x) => x.bottom < m.bottom ? x : m);
+      const entry = trend === 1 ? Math.min(o.top, price) : Math.max(o.bottom, price);
+      const sl = trend === 1 ? o.bottom - 0.25 * A : o.top + 0.25 * A;
+      const risk = Math.abs(entry - sl);
+      if (risk > 0) {
+        const t = smcTargets(trend, entry, risk, swH, swL);
+        if (t) R.plan = { kind: 'pending', dir: trend, entry, sl, tp1: t.tp1, tp2: t.tp2, rr: Math.abs(t.tp1 - entry) / risk,
+                          start: n, inZone: price <= o.top && price >= o.bottom };
+      }
+    }
+  }
+  return R;
+}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script id="app">
+(() => {
+  const $ = id => document.getElementById(id);
+  const TFS = ['1m','5m','15m','1h','4h','1d'];
+  const STEP = { '1m':60, '5m':300, '15m':900, '1h':3600, '4h':14400, '1d':86400 };
+  const state = {
+    symbol:'AAPL', tf:'5m', swing:5, magnet:1, card:1,
+    on:{ ema20:1, ema50:1, ema200:0, bb:0, vol:1, rsi:1, macd:1 },
+    smc:{ struct:1, ob:1, fvg:1, liq:1, pd:0, sr:1, sig:1 },
+    ict:{ gb:0, erd:0, lb:0 }, ictN:'auto'
+  };
+  try {
+    const s = JSON.parse(localStorage.getItem('lcdus') || '{}');
+    for (const k in s) { if (s[k] && typeof s[k]==='object') Object.assign(state[k] || (state[k]={}), s[k]); else state[k] = s[k]; }
+  } catch(e){}
+  const save = () => { try { localStorage.setItem('lcdus', JSON.stringify(state)); } catch(e){} };
+
+  // ---------- charts ----------
+  const base = {
+    autoSize:true,
+    layout:{ background:{color:'#0d1117'}, textColor:'#97a3b3' },
+    grid:{ vertLines:{color:'#18202a'}, horzLines:{color:'#18202a'} },
+    rightPriceScale:{ borderColor:'#232c38', minimumWidth:72 },
+    timeScale:{ borderColor:'#232c38', timeVisible:true, secondsVisible:false, rightOffset:6 },
+    crosshair:{ mode:0 }
+  };
+  const mainChart = LightweightCharts.createChart($('main'), base);
+  const rsiChart  = LightweightCharts.createChart($('rsi'), base);
+  const macdChart = LightweightCharts.createChart($('macd'), base);
+
+  const UP='#2ebd9b', DOWN='#ef5b5b';
+  const candle = mainChart.addCandlestickSeries({ upColor:UP, downColor:DOWN, wickUpColor:UP, wickDownColor:DOWN, borderVisible:false });
+  mainChart.priceScale('right').applyOptions({ scaleMargins:{ top:0.06, bottom:0.2 } });
+  const vol = mainChart.addHistogramSeries({ priceFormat:{type:'volume'}, priceScaleId:'vol', lastValueVisible:false, priceLineVisible:false });
+  mainChart.priceScale('vol').applyOptions({ scaleMargins:{ top:0.85, bottom:0 } });
+
+  const line = (chart, color, w=1) => chart.addLineSeries({ color, lineWidth:w, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
+  const sEma20 = line(mainChart,'#e9b949'), sEma50 = line(mainChart,'#4da3ff'), sEma200 = line(mainChart,'#c678dd');
+  const sBbU = line(mainChart,'#8a94a6'), sBbM = line(mainChart,'#5d6877'), sBbL = line(mainChart,'#8a94a6');
+
+  const sRsi = line(rsiChart,'#e07a5f',2);
+  sRsi.createPriceLine({ price:70, color:'#5d6877', lineWidth:1, lineStyle:2, axisLabelVisible:true, title:'' });
+  sRsi.createPriceLine({ price:30, color:'#5d6877', lineWidth:1, lineStyle:2, axisLabelVisible:true, title:'' });
+  rsiChart.priceScale('right').applyOptions({ autoScale:false, scaleMargins:{top:0.08,bottom:0.08} });
+  sRsi.applyOptions({ autoscaleInfoProvider: () => ({ priceRange:{ minValue:0, maxValue:100 } }) });
+
+  const sHist = macdChart.addHistogramSeries({ priceLineVisible:false, lastValueVisible:false });
+  const sMacd = line(macdChart,'#4da3ff',2), sSig = line(macdChart,'#e9b949',1);
+
+  const charts = [mainChart, rsiChart, macdChart];
+  let syncing = false;
+  charts.forEach(src => src.timeScale().subscribeVisibleLogicalRangeChange(r => {
+    if (syncing || !r) return;
+    syncing = true;
+    charts.forEach(c => { if (c !== src) c.timeScale().setVisibleLogicalRange(r); });
+    syncing = false;
+  }));
+
+  // ---------- indicators ----------
+  function sma(v, p){
+    const out = Array(v.length).fill(null); let s = 0;
+    for (let i=0;i<v.length;i++){ s += v[i]; if (i>=p) s -= v[i-p]; if (i>=p-1) out[i] = s/p; }
+    return out;
+  }
+  function ema(v, p, start=0){
+    const out = Array(v.length).fill(null);
+    if (v.length - start < p) return out;
+    const k = 2/(p+1); let s = 0;
+    for (let i=start;i<start+p;i++) s += v[i];
+    let prev = s/p; out[start+p-1] = prev;
+    for (let i=start+p;i<v.length;i++){ prev = v[i]*k + prev*(1-k); out[i] = prev; }
+    return out;
+  }
+  function bollinger(v, p=20, m=2){
+    const mid = sma(v,p), u = Array(v.length).fill(null), l = Array(v.length).fill(null);
+    for (let i=p-1;i<v.length;i++){
+      let s = 0; for (let j=i-p+1;j<=i;j++) s += (v[j]-mid[i])**2;
+      const sd = Math.sqrt(s/p); u[i] = mid[i]+m*sd; l[i] = mid[i]-m*sd;
+    }
+    return { u, m:mid, l };
+  }
+  function rsi(c, p=14){
+    const out = Array(c.length).fill(null);
+    if (c.length <= p) return out;
+    let g=0, l=0;
+    for (let i=1;i<=p;i++){ const d=c[i]-c[i-1]; if (d>=0) g+=d; else l-=d; }
+    g/=p; l/=p; out[p] = l===0 ? 100 : 100-100/(1+g/l);
+    for (let i=p+1;i<c.length;i++){
+      const d=c[i]-c[i-1];
+      g = (g*(p-1)+Math.max(d,0))/p; l = (l*(p-1)+Math.max(-d,0))/p;
+      out[i] = l===0 ? 100 : 100-100/(1+g/l);
+    }
+    return out;
+  }
+  function macd(c, f=12, s=26, g=9){
+    const ef = ema(c,f), es = ema(c,s), n = c.length;
+    const line = Array(n).fill(null);
+    for (let i=0;i<n;i++) if (ef[i]!=null && es[i]!=null) line[i] = ef[i]-es[i];
+    const first = line.findIndex(x => x!=null);
+    const sig = first<0 ? Array(n).fill(null) : ema(line.map(x => x==null?0:x), g, first);
+    const hist = line.map((x,i) => (x!=null && sig[i]!=null) ? x-sig[i] : null);
+    return { line, sig, hist };
+  }
+
+  // ---------- data (Alpaca Market Data API) ----------
+  let candles = [], ws = null, gen = 0, timer = null, tickerTimer = null, dec = 2, noRetry = false;
+  const cred = { key:'', secret:'', feed:'iex', td:'' };
+  try { Object.assign(cred, JSON.parse(localStorage.getItem('lcdus_cred') || '{}')); } catch(e){}
+  const ALP  = { '1m':'1Min', '5m':'5Min', '15m':'15Min', '1h':'1Hour', '4h':'4Hour', '1d':'1Day' };
+  const DAYS = { '1m':7, '5m':30, '15m':90, '1h':500, '4h':1500, '1d':2500 };
+  const HOST = 'https://data.alpaca.markets/v2/stocks/';
+  const hdr = () => ({ 'APCA-API-KEY-ID': cred.key, 'APCA-API-SECRET-KEY': cred.secret });
+  const tz = new Date().getTimezoneOffset()*60;
+  const toT = ms => Math.floor(ms/1000) - tz;                 // show local (Bangkok) time on the axis
+  const fmt = (x, d) => x==null ? '-' : Number(x).toLocaleString('en-US', { minimumFractionDigits:d, maximumFractionDigits:d });
+  const decimals = p => p>=1 ? 2 : 4;
+
+  function setStatus(kind, text){ $('dot').className = kind; $('stxt').textContent = text; }
+  function closeWS(){
+    clearTimeout(timer);
+    if (ws){ ws.onclose = null; ws.onmessage = null; try { ws.close(); } catch(e){} ws = null; }
+  }
+
+  async function load(){
+    const my = ++gen;
+    closeWS(); clearInterval(tickerTimer); noRetry = false;
+    loadDrawings();
+    if (isGold(state.symbol)) return loadGold(my);
+    if (!cred.key || !cred.secret){ setStatus('err','ยังไม่ได้ใส่ API Key'); openKey(); return; }
+    setStatus('wait','กำลังโหลดข้อมูล');
+    try {
+      const start = new Date(Date.now() - DAYS[state.tf]*864e5).toISOString();
+      const url = `${HOST}${encodeURIComponent(state.symbol)}/bars?timeframe=${ALP[state.tf]}&start=${encodeURIComponent(start)}&limit=1000&sort=desc&adjustment=split&feed=${cred.feed}`;
+      const r = await fetch(url, { headers: hdr() });
+      if (!r.ok){
+        let m = 'HTTP ' + r.status;
+        if (r.status===401 || r.status===403) m = 'API Key ไม่ถูกต้องหรือไม่มีสิทธิ์ใช้ฟีดนี้ ('+r.status+')';
+        else if (r.status===404 || r.status===422) m = 'ไม่พบชื่อย่อหุ้นนี้';
+        else if (r.status===429) m = 'เรียกถี่เกินไป รอสักครู่แล้วลองใหม่';
+        throw new Error(m);
+      }
+      const j = await r.json();
+      if (my !== gen) return;
+      const raw = (j.bars || []).slice().reverse();
+      if (!raw.length) throw new Error('ไม่พบข้อมูลของ ' + state.symbol + ' (ตรวจชื่อย่อหุ้น)');
+      candles = raw.map(b => ({ time:toT(Date.parse(b.t)), open:b.o, high:b.h, low:b.l, close:b.c, volume:b.v }));
+      dec = decimals(candles[candles.length-1].close);
+      [candle,sEma20,sEma50,sEma200,sBbU,sBbM,sBbL].forEach(s => s.applyOptions({ priceFormat:{ type:'price', precision:dec, minMove:Math.pow(10,-dec) } }));
+      render(true);
+      connect(my);
+      loadTicker(my);
+      tickerTimer = setInterval(() => loadTicker(my), 15000);
+    } catch(e){
+      if (my !== gen) return;
+      setStatus('err', e instanceof TypeError ? 'เชื่อมต่อ Alpaca ไม่ได้ (เช็กอินเทอร์เน็ต หรือเบราว์เซอร์บล็อก CORS)' : 'โหลดไม่สำเร็จ: ' + e.message);
+    }
+  }
+
+  function connect(my){
+    ws = new WebSocket(`wss://stream.data.alpaca.markets/v2/${cred.feed}`);
+    ws.onmessage = e => {
+      let arr; try { arr = JSON.parse(e.data); } catch(_){ return; }
+      if (!Array.isArray(arr)) arr = [arr];
+      for (const m of arr){
+        if (m.T === 'success' && m.msg === 'connected'){
+          ws.send(JSON.stringify({ action:'auth', key:cred.key, secret:cred.secret }));
+        } else if (m.T === 'success' && m.msg === 'authenticated'){
+          ws.send(JSON.stringify({ action:'subscribe', trades:[state.symbol] }));
+          setStatus('live','เชื่อมต่อแล้ว · รอรายการซื้อขาย');
+        } else if (m.T === 'error'){
+          if (m.code === 402){ noRetry = true; setStatus('err','API Key ไม่ถูกต้อง'); }
+          else if (m.code === 406){ setStatus('err','การเชื่อมต่อเต็ม: ปิดแท็บ/โปรแกรมอื่นที่ใช้คีย์นี้อยู่'); }
+          else if (m.code === 409){ noRetry = true; setStatus('err','บัญชีไม่มีสิทธิ์ฟีดนี้'); }
+          else setStatus('err','WebSocket: ' + (m.msg || m.code));
+        } else if (m.T === 't'){
+          onTrade(m);
+        }
+      }
+    };
+    ws.onclose = () => {
+      if (my !== gen || noRetry) return;
+      timer = setTimeout(load, 5000);
+    };
+  }
+
+  // build the forming candle for ANY timeframe from live trades
+  function onTrade(m){
+    if (m.S !== state.symbol || !(m.s > 0) || !candles.length) return;
+    const t = toT(Date.parse(m.t)), st = STEP[state.tf], last = candles[candles.length-1];
+    if (t < last.time) return;
+    if (t < last.time + st){
+      last.high = Math.max(last.high, m.p); last.low = Math.min(last.low, m.p);
+      last.close = m.p; last.volume += m.s;
+    } else {
+      const nt = last.time + Math.floor((t - last.time)/st)*st;
+      candles.push({ time:nt, open:m.p, high:m.p, low:m.p, close:m.p, volume:m.s });
+    }
+    setStatus('live','ข้อมูลสด (' + cred.feed.toUpperCase() + ')');
+    render(false);
+  }
+
+  async function loadTicker(my){
+    try {
+      const r = await fetch(`${HOST}${encodeURIComponent(state.symbol)}/snapshot?feed=${cred.feed}`, { headers: hdr() });
+      if (!r.ok || my !== gen) return;
+      const s = await r.json();
+      const lp = s.latestTrade && s.latestTrade.p, pc = s.prevDailyBar && s.prevDailyBar.c;
+      if (lp != null && pc){
+        const pct = (lp-pc)/pc*100, el = $('chg');
+        el.textContent = (pct>=0?'+':'') + pct.toFixed(2) + '% (เทียบปิดวันก่อน)';
+        el.className = pct>=0 ? 'up' : 'down';
+      }
+      const db = s.dailyBar;
+      if (db) $('hl').textContent = `วันนี้ สูง ${fmt(db.h,dec)} ต่ำ ${fmt(db.l,dec)}`;
+    } catch(e){}
+  }
+
+  const clean = (t, arr) => { const o=[]; for (let i=0;i<arr.length;i++) if (arr[i]!=null) o.push({ time:t[i], value:arr[i] }); return o; };
+
+  function render(full){
+    const n = candles.length; if (!n) return;
+    const t = candles.map(c => c.time), cl = candles.map(c => c.close);
+    const e20 = ema(cl,20), e50 = ema(cl,50), e200 = ema(cl,200), bb = bollinger(cl), rs = rsi(cl), mc = macd(cl);
+    const put = (s, arr) => {
+      if (full) s.setData(clean(t, arr));
+      else if (arr[n-1] != null) s.update({ time:t[n-1], value:arr[n-1] });
+    };
+    const volPt = (c) => ({ time:c.time, value:c.volume, color: c.close>=c.open ? 'rgba(46,189,155,.35)' : 'rgba(239,91,91,.35)' });
+    const histPt = (i) => ({ time:t[i], value:mc.hist[i], color: mc.hist[i]>=0 ? 'rgba(46,189,155,.6)' : 'rgba(239,91,91,.6)' });
+
+    if (full){
+      candle.setData(candles);
+      vol.setData(candles.map(volPt));
+      sHist.setData(mc.hist.map((v,i) => v==null ? null : histPt(i)).filter(Boolean));
+    } else {
+      candle.update(candles[n-1]);
+      vol.update(volPt(candles[n-1]));
+      if (mc.hist[n-1] != null) sHist.update(histPt(n-1));
+    }
+    put(sEma20,e20); put(sEma50,e50); put(sEma200,e200);
+    put(sBbU,bb.u); put(sBbM,bb.m); put(sBbL,bb.l);
+    put(sRsi,rs); put(sMacd,mc.line); put(sSig,mc.sig);
+
+    if (full) mainChart.timeScale().setVisibleLogicalRange({ from:Math.max(0,n-160), to:n+6 });
+
+    const last = candles[n-1], prev = candles[n-2] || last;
+    $('last').textContent = fmt(last.close, dec);
+    $('last').className = last.close >= prev.close ? 'up' : 'down';
+    $('mainTag').innerHTML = `<b>${state.symbol}</b> ${cred.feed.toUpperCase()} · ${state.tf} &nbsp; O ${fmt(last.open,dec)} H ${fmt(last.high,dec)} L ${fmt(last.low,dec)} C ${fmt(last.close,dec)}`;
+    $('rsiTag').innerHTML = `RSI 14 &nbsp; <b>${fmt(rs[n-1],1)}</b>`;
+    $('macdTag').innerHTML = `MACD &nbsp; <b>${fmt(mc.line[n-1],dec)}</b> &nbsp; Signal ${fmt(mc.sig[n-1],dec)} &nbsp; Hist ${fmt(mc.hist[n-1],dec)}`;
+    document.title = `${fmt(last.close,dec)} ${state.symbol}`;
+
+    runAnalysis(full);
+  }
+
+  // ---------- SMC analysis ----------
+  let R = null, lastAn = 0, anTimer = null;
+  function runAnalysis(force){
+    const now = performance.now();
+    if (!force && now - lastAn < 400){
+      if (!anTimer) anTimer = setTimeout(() => { anTimer = null; runAnalysis(true); }, 450);
+      return;
+    }
+    lastAn = now;
+    if (candles.length < 40) return;
+    const closed = candles.slice(0, -1);                 // only closed candles -> signals do not repaint
+    R = smcAnalyze(closed, +state.swing, candles[candles.length-1].close);
+    const mk = R.signals.map(s => ({
+      time: closed[s.idx].time,
+      position: s.dir===1 ? 'belowBar' : 'aboveBar',
+      color: s.dir===1 ? UP : DOWN,
+      shape: s.dir===1 ? 'arrowUp' : 'arrowDown',
+      text: (s.dir===1 ? 'BUY' : 'SELL') + (s.res==='win' ? ' ✓' : s.res==='loss' ? ' ✗' : '')
+    }));
+    candle.setMarkers(state.smc.sig ? mk : []);
+    updateCard();
+    bump();
+  }
+
+  function updateCard(){
+    const el = $('card');
+    const head = `<div class="ch"><b>แผนเทรด SMC</b><button class="btn mini" id="cardTog">${state.card?'ซ่อน':'แสดง'}</button></div>`;
+    if (!state.card || !R){ el.innerHTML = head; return; }
+    const d = dec, last = candles[candles.length-1].close;
+    const tr = R.trend===1 ? '<span class="up">ขาขึ้น (Bullish)</span>' : R.trend===-1 ? '<span class="down">ขาลง (Bearish)</span>' : '<span>ยังไม่ชัดเจน</span>';
+    let body = `<div class="row"><span>โครงสร้าง</span>${tr}</div>`;
+    const p = R.plan;
+    if (p){
+      const long = p.dir===1, cls = long ? 'up' : 'down';
+      let status;
+      if (p.kind==='signal'){
+        const r = (last-p.entry)*p.dir/Math.abs(p.entry-p.sl);
+        status = `เข้าแล้ว · ตอนนี้ ${r>=0?'+':''}${r.toFixed(2)}R`;
+      } else {
+        status = p.inZone ? 'ราคาอยู่ในโซน OB รอแท่งยืนยัน'
+                          : `รอราคา${long?'ย่อ':'เด้ง'}เข้าโซน (ห่าง ${(Math.abs(last-p.entry)/last*100).toFixed(2)}%)`;
+      }
+      body += `<div class="row"><span>ทิศทาง</span><b class="${cls}">${long?'LONG (ซื้อ)':'SHORT (ขาย)'}</b></div>
+        <div class="row"><span>สถานะ</span><span>${status}</span></div>
+        <div class="row"><span>Entry</span><b>${fmt(p.entry,d)}</b></div>
+        <div class="row"><span>SL</span><b class="down">${fmt(p.sl,d)}</b></div>
+        <div class="row"><span>TP1</span><b class="up">${fmt(p.tp1,d)}</b></div>
+        <div class="row"><span>TP2</span><b class="up">${fmt(p.tp2,d)}</b></div>
+        <div class="row"><span>R:R (ถึง TP1)</span><b>1 : ${p.rr.toFixed(2)}</b></div>`;
+    } else {
+      body += `<div class="note">ยังไม่มีเซ็ตอัพที่ผ่านเงื่อนไข (ต้องมี OB ที่ยังไม่ถูกทำลายตามทิศโครงสร้าง และ R:R ถึง TP1 ≥ 1.5)</div>`;
+    }
+    const s = R.stats, tot = s.win + s.loss;
+    body += `<div class="note">ย้อนหลังบนข้อมูลที่โหลด: ชนะ ${s.win} · แพ้ ${s.loss} · เปิดอยู่ ${s.open}${tot ? ` · win ${(s.win/tot*100).toFixed(0)}% · รวม ${s.r>=0?'+':''}${s.r.toFixed(1)}R` : ''}</div>
+      <div class="note">กติกาอัตโนมัติเพื่อการศึกษา ไม่ใช่คำแนะนำการลงทุน</div>`;
+    el.innerHTML = head + body;
+  }
+  $('card').addEventListener('click', e => {
+    if (e.target.id === 'cardTog'){ state.card = state.card ? 0 : 1; save(); updateCard(); }
+  });
+
+  // ---------- overlay canvas ----------
+  const ov = $('ov'), ctx = ov.getContext('2d');
+  let rev = 0, lastSig = '', hitSegs = [];
+  const bump = () => { rev++; };
+  const ts = () => mainChart.timeScale();
+  const X = i => ts().logicalToCoordinate(i);
+  const Y = p => candle.priceToCoordinate(p);
+
+  function tIdx(t){
+    const n = candles.length; if (!n) return 0;
+    const st = STEP[state.tf];
+    if (t <= candles[0].time) return (t - candles[0].time) / st;
+    if (t >= candles[n-1].time) return n-1 + (t - candles[n-1].time) / st;
+    let lo = 0, hi = n-1;
+    while (hi - lo > 1){ const m = (lo+hi) >> 1; if (candles[m].time <= t) lo = m; else hi = m; }
+    if (candles[lo].time === t) return lo;
+    return lo + (t - candles[lo].time) / (candles[hi].time - candles[lo].time);
+  }
+  function idxT(i){
+    const n = candles.length, st = STEP[state.tf], r = Math.round(i);
+    if (r < 0) return candles[0].time + r*st;
+    if (r >= n) return candles[n-1].time + (r-(n-1))*st;
+    return candles[r].time;
+  }
+
+  const FONT = '11px system-ui,-apple-system,"Segoe UI","Noto Sans Thai",sans-serif';
+  function frect(x1,y1,x2,y2,fill,stroke){
+    const x = Math.min(x1,x2), y = Math.min(y1,y2), w = Math.abs(x2-x1), h = Math.abs(y2-y1);
+    if (fill){ ctx.fillStyle = fill; ctx.fillRect(x,y,w,h); }
+    if (stroke){ ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.strokeRect(x+.5,y+.5,w,h); }
+  }
+  function seg(x1,y1,x2,y2,color,dash,w){
+    ctx.beginPath(); ctx.setLineDash(dash||[]); ctx.strokeStyle = color; ctx.lineWidth = w||1;
+    ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.setLineDash([]);
+  }
+  function label(text, x, y, fg, bg, align){
+    ctx.font = FONT; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    const w = ctx.measureText(text).width + 8;
+    const x0 = align==='right' ? x-w : align==='center' ? x-w/2 : x;
+    if (bg){ ctx.fillStyle = bg; ctx.fillRect(x0, y-8, w, 16); }
+    ctx.fillStyle = fg; ctx.fillText(text, x0+4, y);
+  }
+
+  const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+  const FEXT = [0, 0.618, 1, 1.272, 1.618, 2, 2.618];
+  const FIBC = { 0:'#8a94a6', 0.236:'#ef5b5b', 0.382:'#e9b949', 0.5:'#2ebd9b', 0.618:'#4da3ff', 0.786:'#c678dd', 1:'#8a94a6',
+                 1.272:'#e07a5f', 1.618:'#4da3ff', 2:'#e9b949', 2.618:'#c678dd' };
+
+  function paint(){
+    const dpr = window.devicePixelRatio || 1;
+    const cw = ov.parentElement.clientWidth, ch = ov.parentElement.clientHeight;
+    if (ov.width !== Math.round(cw*dpr) || ov.height !== Math.round(ch*dpr)){
+      ov.width = Math.round(cw*dpr); ov.height = Math.round(ch*dpr);
+      ov.style.width = cw+'px'; ov.style.height = ch+'px';
+    }
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,cw,ch);
+    if (candles.length < 3) { hitSegs = []; return; }
+    const T = ts();
+    const pw = typeof T.width === 'function' ? T.width() : cw-72;
+    const ph = ch - (typeof T.height === 'function' ? T.height() : 26);
+    const G = { pw, ph, hit: [] };
+    ctx.save(); ctx.beginPath(); ctx.rect(0,0,pw,ph); ctx.clip();
+
+    const S = state.smc;
+    paintICT(pw, ph); paintSnR(pw, ph);
+    if (R){
+      // premium / discount
+      if (S.pd && R.range){
+        const hi = R.range.hi, lo = R.range.lo, mid = (hi.price+lo.price)/2;
+        const xs = X(Math.min(hi.idx, lo.idx)), yH = Y(hi.price), yL = Y(lo.price), yE = Y(mid);
+        if (xs!=null && yH!=null && yL!=null && yE!=null){
+          const x0 = Math.max(0, xs);
+          frect(x0,yH,pw,yE,'rgba(239,91,91,.07)'); frect(x0,yE,pw,yL,'rgba(46,189,155,.07)');
+          seg(x0,yE,pw,yE,'rgba(200,210,225,.45)',[4,4],1);
+          label('Premium', x0+2, yH+10, 'rgba(239,91,91,.9)'); label('EQ 50%', x0+2, yE-9, 'rgba(200,210,225,.8)'); label('Discount', x0+2, yL-10, 'rgba(46,189,155,.9)');
+        }
+      }
+      // FVG
+      if (S.fvg) for (const g of R.fvgs){
+        const x = X(g.idx), y1 = Y(g.top), y2 = Y(g.bottom); if (x==null||y1==null||y2==null) continue;
+        const c = g.dir===1 ? '77,163,255' : '198,120,221', x0 = Math.max(0,x);
+        frect(x0,y1,pw,y2,`rgba(${c},.14)`,`rgba(${c},.35)`);
+        label('FVG', x0+2, Math.min(y1,y2)+9, `rgba(${c},1)`);
+      }
+      // Order blocks
+      if (S.ob) for (const o of R.obs){
+        const x = X(o.idx), y1 = Y(o.top), y2 = Y(o.bottom); if (x==null||y1==null||y2==null) continue;
+        const c = o.dir===1 ? '46,189,155' : '239,91,91', x0 = Math.max(0,x);
+        frect(x0,y1,pw,y2,`rgba(${c},.17)`,`rgba(${c},.6)`);
+        label(o.dir===1?'Bull OB':'Bear OB', x0+2, Math.min(y1,y2)+9, `rgba(${c},1)`);
+      }
+      // support / resistance
+      if (S.sr) for (const l of R.sr){
+        const y = Y(l.price); if (y==null) continue;
+        const col = l.kind==='S' ? '46,189,155' : '239,91,91';
+        seg(0,y,pw,y,`rgba(${col},.7)`,[8,5],1);
+        label(`${l.kind} ${fmt(l.price,dec)} ×${l.touches}`, pw-4, y-9, `rgba(${col},1)`, null, 'right');
+      }
+      // liquidity
+      if (S.liq) for (const q of R.eq){
+        const x1 = X(q.i1), x2 = X(q.i2), y = Y(q.price); if (x1==null||x2==null||y==null) continue;
+        seg(x1,y,pw,y,'rgba(233,185,73,.75)',[2,3],1);
+        label(q.dir===1?'EQH':'EQL', (x1+x2)/2, y + (q.dir===1?-9:9), '#e9b949', null, 'center');
+      }
+      // structure
+      if (S.struct) for (const ev of R.events){
+        const x1 = X(ev.from), x2 = X(ev.to), y = Y(ev.price); if (x1==null||x2==null||y==null) continue;
+        const col = ev.dir===1 ? UP : DOWN;
+        seg(x1,y,x2,y,col,[5,4],1);
+        const mid = (Math.max(x1,0)+x2)/2;
+        const ch2 = ev.type==='CHoCH';
+        label(ev.type, mid, y + (ev.dir===1?-9:9), ch2?'#14110a':'#fff', ch2?'#e9b949':col, 'center');
+      }
+      // entry / SL / TP
+      if (S.sig && R.plan) drawPlan(R.plan, G);
+    }
+
+    // user drawings
+    for (const d of drawings) drawUser(d, G, d.id === selected, false);
+    if (pending && hover) drawUser({ type:pending.type, pts: pending.pts.concat([hover]) }, G, false, true);
+    else if (pending && pending.pts.length) drawUser({ type:pending.type, pts: pending.pts }, G, false, true);
+
+    ctx.restore();
+    hitSegs = G.hit;
+  }
+
+  function drawPlan(p, G){
+    const x1 = X(p.start); if (x1==null) return;
+    const barW = (X(10) - X(0)) / 10;
+    const x2 = x1 + 16*barW;
+    const yE = Y(p.entry), yS = Y(p.sl), y1 = Y(p.tp1), y2 = Y(p.tp2);
+    if ([yE,yS,y1,y2].some(v => v==null)) return;
+    frect(x1,yE,x2,yS,'rgba(239,91,91,.16)');
+    frect(x1,yE,x2,y1,'rgba(46,189,155,.15)');
+    frect(x1,y1,x2,y2,'rgba(46,189,155,.08)');
+    seg(x1,yE,x2,yE,'rgba(235,240,248,.9)',[4,3],1);
+    seg(x1,yS,x2,yS,DOWN,null,1.5);
+    seg(x1,y1,x2,y1,UP,null,1.5);
+    seg(x1,y2,x2,y2,UP,[5,4],1);
+    const tag = p.kind==='signal' ? '' : ' (pending)';
+    label(`TP2 ${fmt(p.tp2,dec)}`, x2-3, y2 + (y2<yE?9:-9), UP, null, 'right');
+    label(`TP1 ${fmt(p.tp1,dec)} · 1:${p.rr.toFixed(1)}`, x2-3, y1 + (y1<yE?9:-9), UP, null, 'right');
+    label(`${p.dir===1?'LONG':'SHORT'} Entry ${fmt(p.entry,dec)}${tag}`, x2-3, yE + (yS>yE?-9:9), '#e8edf5', null, 'right');
+    label(`SL ${fmt(p.sl,dec)}`, x2-3, yS + (yS>yE?9:-9), DOWN, null, 'right');
+  }
+
+  // ---------- user drawings ----------
+  let drawings = [], pending = null, hover = null, selected = null, tool = 'select';
+  const NEED = { hline:1, trend:2, fib:2, fibext:3, pos:3 };
+  const HINT = {
+    select:'คลิกเส้นเพื่อเลือก · Delete = ลบ · Esc = ยกเลิก',
+    hline:'คลิก 1 ครั้งเพื่อวางเส้นแนวนอน',
+    trend:'คลิกจุดเริ่ม แล้วคลิกจุดที่สอง',
+    fib:'คลิกจุดเริ่ม (A) แล้วจุดสิ้นสุด (B) · ระดับ 0 อยู่ที่ B, ระดับ 1 อยู่ที่ A',
+    fibext:'คลิก A → B → C เพื่อฉายเป้าหมายต่อจากจุด C',
+    pos:'คลิก Entry → SL → TP (ถ้า SL ต่ำกว่า Entry = Long)'
+  };
+  const uid = () => Math.random().toString(36).slice(2,9);
+  const dkey = () => `lcdus_d:${state.symbol}`;
+  function loadDrawings(){
+    try { drawings = JSON.parse(localStorage.getItem(dkey()) || '[]'); } catch(e){ drawings = []; }
+    selected = null; pending = null; hover = null; syncDraw(); bump();
+  }
+  function saveDrawings(){ try { localStorage.setItem(dkey(), JSON.stringify(drawings)); } catch(e){} }
+
+  function drawUser(d, G, sel, ghost){
+    const P = d.pts.map(pt => ({ x:X(tIdx(pt.t)), y:Y(pt.p), i:tIdx(pt.t), p:pt.p }));
+    if (!P.length || P.some(q => q.x==null || q.y==null)) return;
+    ctx.globalAlpha = ghost ? 0.75 : 1;
+    const lw = sel ? 2.5 : 1.5;
+    const hit = (x1,y1,x2,y2) => { if (!ghost) G.hit.push({ id:d.id, x1,y1,x2,y2 }); };
+    const pw = G.pw;
+
+    switch (d.type){
+      case 'hline': {
+        const y = P[0].y;
+        seg(0,y,pw,y,'#e9b949',[6,4],lw);
+        label(fmt(P[0].p,dec), pw-4, y, '#14110a', '#e9b949', 'right');
+        hit(0,y,pw,y); break;
+      }
+      case 'trend': {
+        if (P.length < 2) break;
+        const a = P[0], b = P[1];
+        seg(a.x,a.y,b.x,b.y,'#4da3ff',null,lw);
+        if (b.x !== a.x){
+          const k = (b.y-a.y)/(b.x-a.x), xe = pw+60, ye = b.y + k*(xe-b.x);
+          seg(b.x,b.y,xe,ye,'rgba(77,163,255,.55)',[5,4],1);
+          hit(a.x,a.y,xe,ye);
+        } else hit(a.x,a.y,b.x,b.y);
+        break;
+      }
+      case 'fib': {
+        if (P.length < 2) break;
+        const a = P[0], b = P[1], xl = Math.min(a.x,b.x);
+        const lv = FIB.map(L => ({ L, p: b.p + (a.p-b.p)*L }));
+        for (let i=0;i<lv.length-1;i++){
+          const y1 = Y(lv[i].p), y2 = Y(lv[i+1].p); if (y1==null||y2==null) continue;
+          frect(xl,y1,pw,y2, lv[i].L===0.618 ? 'rgba(233,185,73,.20)' : 'rgba(120,140,170,.07)');
+        }
+        lv.forEach(o => {
+          const y = Y(o.p); if (y==null) return;
+          seg(xl,y,pw,y,FIBC[o.L],null,sel?2:1);
+          label(`${o.L}  ${fmt(o.p,dec)}`, Math.max(xl,0)+2, y-9, FIBC[o.L]);
+          hit(xl,y,pw,y);
+        });
+        seg(a.x,a.y,b.x,b.y,'rgba(200,210,225,.6)',[4,4],1);
+        break;
+      }
+      case 'fibext': {
+        if (P.length < 2) break;
+        const a = P[0], b = P[1];
+        seg(a.x,a.y,b.x,b.y,'rgba(200,210,225,.6)',[4,4],1);
+        if (P.length < 3) break;
+        const c = P[2], span = b.p - a.p, xl = c.x;
+        seg(b.x,b.y,c.x,c.y,'rgba(200,210,225,.6)',[4,4],1);
+        FEXT.forEach(L => {
+          const pr = c.p + span*L, y = Y(pr); if (y==null) return;
+          seg(xl,y,pw,y,FIBC[L],null,sel?2:1);
+          label(`${L}  ${fmt(pr,dec)}`, Math.max(xl,0)+2, y-9, FIBC[L]);
+          hit(xl,y,pw,y);
+        });
+        break;
+      }
+      case 'pos': {
+        if (P.length < 2) break;
+        const e = P[0], s = P[1], t = P[2];
+        const barW = (X(10)-X(0))/10;
+        const bars = t ? Math.max(10, t.i - e.i) : 15;
+        const x1 = e.x, x2 = e.x + bars*barW;
+        frect(x1,e.y,x2,s.y,'rgba(239,91,91,.18)');
+        seg(x1,e.y,x2,e.y,'rgba(235,240,248,.9)',[4,3],lw); hit(x1,e.y,x2,e.y);
+        seg(x1,s.y,x2,s.y,DOWN,null,lw); hit(x1,s.y,x2,s.y);
+        const long = s.p < e.p, risk = Math.abs(e.p - s.p);
+        label(`${long?'LONG':'SHORT'} Entry ${fmt(e.p,dec)}`, x2-3, e.y + (s.y>e.y?-9:9), '#e8edf5', null, 'right');
+        label(`SL ${fmt(s.p,dec)} (${((s.p-e.p)/e.p*100).toFixed(2)}%)`, x2-3, s.y + (s.y>e.y?9:-9), DOWN, null, 'right');
+        if (t){
+          frect(x1,e.y,x2,t.y,'rgba(46,189,155,.17)');
+          seg(x1,t.y,x2,t.y,UP,null,lw); hit(x1,t.y,x2,t.y);
+          label(`TP ${fmt(t.p,dec)} (${((t.p-e.p)/e.p*100).toFixed(2)}%) · R:R 1:${(Math.abs(t.p-e.p)/risk).toFixed(2)}`, x2-3, t.y + (t.y<e.y?9:-9), UP, null, 'right');
+        }
+        break;
+      }
+    }
+    ctx.globalAlpha = 1;
+    if (sel) P.forEach(q => { ctx.beginPath(); ctx.arc(q.x,q.y,4,0,7); ctx.fillStyle='#fff'; ctx.fill(); ctx.strokeStyle='#e9b949'; ctx.lineWidth=2; ctx.stroke(); });
+  }
+
+  function pointFromXY(x, y){
+    const lg = ts().coordinateToLogical(x); if (lg == null) return null;
+    const idx = Math.round(lg);
+    let price = candle.coordinateToPrice(y); if (price == null) return null;
+    const bar = candles[idx];
+    if (state.magnet && bar){
+      let best = null, bd = 18;
+      [bar.open, bar.high, bar.low, bar.close].forEach(v => { const yy = Y(v); if (yy!=null && Math.abs(yy-y) < bd){ bd = Math.abs(yy-y); best = v; } });
+      if (best != null) price = best;
+    }
+    return { t: idxT(idx), p: price };
+  }
+  function segDist(px, py, s){
+    const dx = s.x2-s.x1, dy = s.y2-s.y1, l2 = dx*dx + dy*dy;
+    let t = l2 ? ((px-s.x1)*dx + (py-s.y1)*dy)/l2 : 0; t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (s.x1+t*dx), py - (s.y1+t*dy));
+  }
+
+  mainChart.subscribeClick(param => {
+    if (!param.point) return;
+    const { x, y } = param.point;
+    if (tool === 'select'){
+      let best = null, bd = 7;
+      for (const s of hitSegs){ const dd = segDist(x,y,s); if (dd < bd){ bd = dd; best = s.id; } }
+      selected = best; syncDraw(); bump(); return;
+    }
+    const pt = pointFromXY(x, y); if (!pt) return;
+    if (!pending) pending = { type: tool, pts: [] };
+    pending.pts.push(pt);
+    if (pending.pts.length >= NEED[tool]){
+      const d = { id: uid(), type: tool, pts: pending.pts };
+      drawings.push(d); saveDrawings();
+      pending = null; hover = null; selected = d.id;
+      setTool('select');
+    }
+    syncDraw(); bump();
+  });
+  mainChart.subscribeCrosshairMove(param => {
+    if (!pending) return;
+    hover = param.point ? pointFromXY(param.point.x, param.point.y) : null;
+    bump();
+  });
+
+  function setTool(t){
+    tool = t; pending = null; hover = null;
+    if (t !== 'select') selected = null;
+    $('main').classList.toggle('draw', t !== 'select');
+    syncDraw(); bump();
+  }
+  function syncDraw(){
+    $('drawTools').querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === tool));
+    $('hint').textContent = HINT[tool] || '';
+    $('delSel').disabled = !selected;
+  }
+  $('drawTools').addEventListener('click', e => {
+    const b = e.target.closest('[data-tool]'); if (b) setTool(b.dataset.tool);
+  });
+  const delSelected = () => {
+    if (!selected) return;
+    drawings = drawings.filter(d => d.id !== selected); selected = null; saveDrawings(); syncDraw(); bump();
+  };
+  $('delSel').onclick = delSelected;
+  $('undo').onclick = () => { if (pending){ pending = null; hover = null; } else { const d = drawings.pop(); if (d && d.id === selected) selected = null; saveDrawings(); } syncDraw(); bump(); };
+  $('clearAll').onclick = () => { if (drawings.length && confirm('ลบเส้นที่วาดทั้งหมดของสัญลักษณ์นี้?')){ drawings = []; selected = null; saveDrawings(); syncDraw(); bump(); } };
+  $('magnet').onchange = e => { state.magnet = e.target.checked ? 1 : 0; save(); };
+  document.addEventListener('keydown', e => {
+    const tg = e.target.tagName; if (tg === 'INPUT' || tg === 'SELECT') return;
+    if (e.key === 'Delete' || e.key === 'Backspace'){ delSelected(); }
+    else if (e.key === 'Escape'){ setTool('select'); selected = null; syncDraw(); bump(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z'){ e.preventDefault(); $('undo').click(); }
+  });
+
+  // redraw only when something relevant changed
+  function loop(){
+    const r = ts().getVisibleLogicalRange();
+    let sig = rev + '|' + ov.parentElement.clientWidth + 'x' + ov.parentElement.clientHeight;
+    if (r) sig += '|' + r.from.toFixed(3) + '|' + r.to.toFixed(3);
+    if (candles.length){ const c = candles[candles.length-1].close; sig += '|' + Y(c) + '|' + Y(c*1.01); }
+    if (sig !== lastSig){ lastSig = sig; paint(); }
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- UI ----------
+  const tfBox = $('tfs');
+  TFS.forEach(tf => {
+    const b = document.createElement('button');
+    b.className = 'btn'; b.textContent = tf; b.dataset.tf = tf;
+    b.onclick = () => { state.tf = tf; save(); syncUI(); load(); };
+    tfBox.appendChild(b);
+  });
+
+  function applyIndicators(){
+    const o = state.on;
+    sEma20.applyOptions({ visible:!!o.ema20 });
+    sEma50.applyOptions({ visible:!!o.ema50 });
+    sEma200.applyOptions({ visible:!!o.ema200 });
+    [sBbU,sBbM,sBbL].forEach(s => s.applyOptions({ visible:!!o.bb }));
+    vol.applyOptions({ visible:!!o.vol });
+    $('rsiP').style.display = o.rsi ? '' : 'none';
+    $('macdP').style.display = o.macd ? '' : 'none';
+    const r = mainChart.timeScale().getVisibleLogicalRange();
+    if (r) setTimeout(() => { syncing = true; charts.forEach(c => c.timeScale().setVisibleLogicalRange(r)); syncing = false; bump(); }, 50);
+  }
+
+  function syncUI(){
+    $('symbol').value = state.symbol;
+    $('swing').value = String(state.swing);
+    $('magnet').checked = !!state.magnet;
+    tfBox.querySelectorAll('.btn').forEach(b => b.classList.toggle('on', b.dataset.tf === state.tf));
+    $('tools').querySelectorAll('input').forEach(i => i.checked = !!state.on[i.dataset.ind]);
+    $('smcTools').querySelectorAll('[data-smc]').forEach(i => i.checked = !!state.smc[i.dataset.smc]);
+  }
+
+  $('tools').addEventListener('change', e => {
+    if (!e.target.dataset.ind) return;
+    state.on[e.target.dataset.ind] = e.target.checked ? 1 : 0;
+    save(); applyIndicators();
+  });
+  $('smcTools').addEventListener('change', e => {
+    if (e.target.dataset.smc){
+      state.smc[e.target.dataset.smc] = e.target.checked ? 1 : 0; save();
+      if (e.target.dataset.smc === 'sig') runAnalysis(true); else bump();
+    } else if (e.target.id === 'swing'){
+      state.swing = +e.target.value; save(); runAnalysis(true);
+    }
+  });
+  const go = () => {
+    const s = $('symbol').value.trim().toUpperCase().replace('/', '');
+    if (!s) return;
+    state.symbol = s; save(); load(); refreshStar();
+  };
+  $('go').onclick = go;
+  $('symbol').addEventListener('keydown', e => { if (e.key==='Enter') go(); });
+
+  // API key dialog
+  function openKey(){
+    $('kKey').value = cred.key; $('kSec').value = cred.secret; $('kFeed').value = cred.feed; $('kTd').value = cred.td || '';
+    const d = $('keyDlg'); if (!d.open) d.showModal();
+  }
+  $('keyBtn').onclick = openKey;
+  $('kClose').onclick = () => $('keyDlg').close();
+  $('kSave').onclick = () => {
+    cred.key = $('kKey').value.trim(); cred.secret = $('kSec').value.trim(); cred.feed = $('kFeed').value; cred.td = $('kTd').value.trim();
+    try { localStorage.setItem('lcdus_cred', JSON.stringify(cred)); } catch(e){}
+    $('keyDlg').close(); load();
+  };
+  $('kClear').onclick = () => {
+    cred.key = ''; cred.secret = ''; cred.td = '';
+    try { localStorage.removeItem('lcdus_cred'); } catch(e){}
+    $('kKey').value = ''; $('kSec').value = ''; closeWS(); gen++; setStatus('err','ลบคีย์แล้ว');
+  };
+
+
+
+
+  // ================= Gold spot (XAUUSD / XAGUSD) via Twelve Data =================
+  const isGold = x => /^X(AU|AG)\/?USD$/.test(x);
+  const tdSym = x => x.replace(/^(X..)\/?USD$/, '$1/USD');
+  const TDI = { '1m':'1min', '5m':'5min', '15m':'15min', '1h':'1h', '4h':'4h', '1d':'1day' };
+  async function tdFetch(path){
+    const r = await fetch('https://api.twelvedata.com/' + path + '&apikey=' + encodeURIComponent(cred.td));
+    let j = {}; try { j = await r.json(); } catch(e){}
+    if (j.status === 'error' || !r.ok) throw new Error(j.message || ('HTTP ' + r.status));
+    return j;
+  }
+  const tdCandle = v => ({ time: toT(Date.parse(v.datetime.replace(' ', 'T') + 'Z')), open:+v.open, high:+v.high, low:+v.low, close:+v.close, volume:+v.volume || 0 });
+  function goldChg(){
+    const l = candles[candles.length-1]; let p = null;
+    for (let i = candles.length - 1; i >= 0; i--) if (candles[i].time <= l.time - 86400){ p = candles[i]; break; }
+    if (!p) return;
+    const pct = (l.close - p.close) / p.close * 100, el = $('chg');
+    el.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '% (เทียบ 24 ชม. ก่อน)'; el.className = pct >= 0 ? 'up' : 'down';
+    $('hl').textContent = '';
+  }
+  async function loadGold(my){
+    if (!cred.td){ setStatus('err', 'ทองคำต้องใช้ Twelve Data API Key'); openKey(); return; }
+    setStatus('wait', 'กำลังโหลดข้อมูลทองคำ');
+    try {
+      const j = await tdFetch(`time_series?symbol=${encodeURIComponent(tdSym(state.symbol))}&interval=${TDI[state.tf]}&outputsize=1000&timezone=UTC&order=ASC`);
+      if (my !== gen) return;
+      const arr = (j.values || []).map(tdCandle).sort((a, b) => a.time - b.time);
+      if (!arr.length) throw new Error('ไม่พบข้อมูลของ ' + state.symbol);
+      candles = arr; dec = decimals(arr[arr.length-1].close);
+      [candle,sEma20,sEma50,sEma200,sBbU,sBbM,sBbL].forEach(x => x.applyOptions({ priceFormat:{ type:'price', precision:dec, minMove:Math.pow(10,-dec) } }));
+      render(true); goldChg();
+      setStatus('live', 'ทองคำ spot (Twelve Data) อัปเดตทุก 60 วินาที');
+      goldWS(my, 0);
+    } catch(e){
+      if (my !== gen) return;
+      setStatus('err', e instanceof TypeError ? 'เชื่อมต่อ Twelve Data ไม่ได้ (เช็กอินเทอร์เน็ต หรือเบราว์เซอร์บล็อก CORS)' : 'โหลดทองคำไม่สำเร็จ: ' + e.message);
+    }
+  }
+  // ---- realtime gold via Twelve Data WebSocket (needs a plan with WebSocket access; falls back to 60s polling) ----
+  const TDS = { '1m':60, '5m':300, '15m':900, '1h':3600, '4h':14400, '1d':86400 };
+  let goldTick = { s: '', p: 0, at: 0 }, gdRaf = 0;
+  function onGoldTick(price, tsRaw){
+    if (!candles.length || !(price > 0)) return;
+    const t = toT(tsRaw > 1e12 ? tsRaw : tsRaw * 1000), step = TDS[state.tf], last = candles[candles.length - 1];
+    goldTick = { s: state.symbol, p: price, at: Date.now() };
+    if (!step || t < last.time) return;
+    const k = Math.floor((t - last.time) / step);
+    if (k >= 1) candles.push({ time: last.time + k * step, open: price, high: price, low: price, close: price, volume: 0 });
+    else { last.close = price; last.high = Math.max(last.high, price); last.low = Math.min(last.low, price); }
+    if (!gdRaf) gdRaf = requestAnimationFrame(() => { gdRaf = 0; render(false); goldChg(); });
+  }
+  function goldWS(my, attempt){
+    if (my !== gen) return;
+    closeWS();
+    let live = false, fb = false, hb = null, sock;
+    const fallback = why => {
+      if (fb || my !== gen) return; fb = true; clearInterval(hb);
+      setStatus('wait', why + ' ใช้การดึงราคาทุก 60 วินาทีแทน');
+      clearInterval(tickerTimer); tickerTimer = setInterval(() => pollGold(my), 60000);
+    };
+    try { sock = new WebSocket('wss://ws.twelvedata.com/v1/quotes/price?apikey=' + encodeURIComponent(cred.td)); } catch(e){ return fallback('เปิด WebSocket ไม่ได้'); }
+    ws = sock;
+    sock.onopen = () => {
+      sock.send(JSON.stringify({ action: 'subscribe', params: { symbols: tdSym(state.symbol) } }));
+      hb = setInterval(() => { if (ws !== sock){ clearInterval(hb); return; } try { sock.send('{"action":"heartbeat"}'); } catch(e){} }, 10000);
+    };
+    sock.onmessage = ev => {
+      let m; try { m = JSON.parse(ev.data); } catch(e){ return; }
+      if (m.event === 'price' && m.symbol === tdSym(state.symbol)){
+        if (!live){ live = true; setStatus('live', 'ทองคำเรียลไทม์ (Twelve Data WebSocket)'); }
+        onGoldTick(+m.price, +m.timestamp);
+      } else if (m.event === 'subscribe-status' && ((m.fails && m.fails.length) || m.status === 'error')){
+        fallback('บัญชี Twelve Data นี้ใช้ WebSocket ไม่ได้ (ต้องเป็นแผนที่รองรับ)');
+      }
+    };
+    sock.onerror = () => { if (!live) fallback('เชื่อมต่อ WebSocket ไม่สำเร็จ'); };
+    sock.onclose = () => {
+      clearInterval(hb); if (ws !== sock || my !== gen || fb) return;
+      if (!live) return fallback('WebSocket ถูกปิดทันที');
+      if (attempt < 5) setTimeout(() => goldWS(my, attempt + 1), 3000); else fallback('WebSocket หลุดบ่อย');
+    };
+  }
+
+  async function pollGold(my){
+    if (my !== gen || document.hidden || $('vChart').hidden || !candles.length) return;
+    try {
+      const j = await tdFetch(`time_series?symbol=${encodeURIComponent(tdSym(state.symbol))}&interval=${TDI[state.tf]}&outputsize=2&timezone=UTC&order=ASC`);
+      if (my !== gen) return;
+      for (const c of (j.values || []).map(tdCandle).sort((a, b) => a.time - b.time)){
+        const last = candles[candles.length-1];
+        if (c.time === last.time) Object.assign(last, c, { volume: last.volume }); else if (c.time > last.time) candles.push(c);
+      }
+      render(false); goldChg(); setStatus('live', 'ทองคำ spot (Twelve Data) อัปเดตทุก 60 วินาที');
+    } catch(e){ setStatus('err', 'อัปเดตทองคำไม่สำเร็จ: ' + e.message); }
+  }
+
+  // ================= ICT: PO3 dealing range / Goldbach (IPDA) / 20-40-60 lookback =================
+  const GB = [0,3,11,17,29,41,47,50,53,59,71,83,89,97,100];
+  const GBN = {0:'High',3:'RB',11:'OB',17:'FVG',29:'LV',41:'BR',47:'MB',50:'EQ',53:'MB',59:'BR',71:'LV',83:'FVG',89:'OB',97:'RB',100:'Low'};
+  const LBN = [18,27,36,45,54,63,72,81,99,108,117,126];
+  function po3Range(arr = candles, opt = state.ictN){
+    const n = arr.length, last = arr[n-1].close; let size = +opt;
+    if (!(size > 0)){
+      const w = arr.slice(-100), rg = Math.max(...w.map(c => c.high)) - Math.min(...w.map(c => c.low));
+      size = 1; while (size < rg && size < 19683) size *= 3;
+    }
+    const lo = Math.floor(last / size) * size;
+    return { size, lo, hi: lo + size };
+  }
+  let lbCache = { k: '', v: [] };
+  function lookbackAnchors(){
+    const n = candles.length, k = n + ':' + candles[0].time + ':' + candles[n-1].time;
+    if (lbCache.k === k) return lbCache.v;
+    const out = [], done = new Set();
+    for (let i = 0; i < n; i++){
+      const d = new Date(candles[i].time * 1000), y = d.getUTCFullYear(), m = d.getUTCMonth() + 1, day = d.getUTCDate();
+      const num = LBN[m - 1], key = y + '-' + m;
+      if (!done.has(key) && day >= num % 10){ done.add(key); out.push({ i, num }); }
+    }
+    lbCache = { k, v: out }; return out;
+  }
+  function paintICT(pw, ph){
+    const I = state.ict; if (!I || !(I.gb || I.erd || I.lb) || candles.length < 3) return;
+    if (I.lb) for (const a of lookbackAnchors()){
+      const x = X(a.i); if (x == null || x < 0 || x > pw) continue;
+      seg(x, 0, x, ph, 'rgba(198,120,221,.45)', [5,4], 1);
+      label(String(a.num), x + 3, 12, 'rgba(198,120,221,1)');
+    }
+    if (!(I.gb || I.erd)) return;
+    const r = po3Range(), at = p => r.hi - p / 100 * r.size, d = decimals(r.hi);
+    if (I.gb){
+      label(`PO3 ${r.size} · ${fmt(r.lo, d)}–${fmt(r.hi, d)}`, 6, ph - 8, 'rgba(77,163,255,1)');
+      for (const p of GB){
+        const y = Y(at(p)); if (y == null) continue;
+        const col = p === 0 ? 'rgba(239,91,91,.9)' : p === 100 ? 'rgba(46,189,155,.9)' : p === 50 ? 'rgba(235,240,250,.7)' : (p === 29 || p === 71) ? 'rgba(77,163,255,.7)' : 'rgba(140,152,170,.4)';
+        seg(0, y, pw, y, col, p === 50 ? [4,4] : null, 1);
+        label(`${p} ${GBN[p]}`, pw - 74, y - 3, col);
+      }
+    }
+    if (I.erd) for (const [t, k] of [['ERD+', -0.111], ['ERD−', 1.111]]){
+      const y = Y(r.hi - k * r.size); if (y == null) continue;
+      seg(0, y, pw, y, 'rgba(233,185,73,.8)', [6,4], 1); label(t + ' ' + fmt(r.hi - k * r.size, d), pw - 120, y - 3, 'rgba(233,185,73,1)');
+    }
+  }
+
+  // ================= Alchemist SnR (line-chart A/V levels) + Trendline/Power of X + IFVG/BPR/CE =================
+  let snrC = { k: '', v: null };
+  function snrCompute(arr = candles, noCache = false){
+    const n = arr.length, key = n + ':' + arr[n-1].time + ':' + arr[n-1].close + ':' + state.symbol + state.tf;
+    if (!noCache && snrC.k === key) return snrC.v;
+    const c = arr.map(x => x.close), o = arr.map(x => x.open), h = arr.map(x => x.high), l = arr.map(x => x.low), last = c[n-1];
+    let atr = 0; for (let i = Math.max(1, n - 14); i < n; i++) atr += Math.max(h[i] - l[i], Math.abs(h[i] - c[i-1]), Math.abs(l[i] - c[i-1]));
+    atr /= Math.min(14, n - 1); const tol = atr * 0.1;
+    // 1) SnR on the line chart (closes): A = peak of closes (resistance), V = trough of closes (support)
+    const A = [], V = [];
+    for (let i = Math.max(2, n - 400); i < n - 2; i++){
+      const w = c.slice(i - 2, i + 3);
+      if (c[i] > c[i-1] && c[i] === Math.max(...w)) A.push(i);
+      if (c[i] < c[i-1] && c[i] === Math.min(...w)) V.push(i);
+    }
+    const mk = (i, type) => {
+      const p = c[i], fresh = type === 'A' ? Math.max(...h.slice(i + 2)) < p : Math.min(...l.slice(i + 2)) > p;
+      let flip = -1;
+      for (let j = i + 1; j < n; j++) if (type === 'A' ? c[j] > p + tol : c[j] < p - tol){ flip = j; break; }
+      if (flip < 0) return { p, i, type, fresh };
+      const dead = c.slice(flip).some(x => type === 'A' ? x < p - tol : x > p + tol);   // role reversal (RBS / SBR) until broken again
+      return dead ? null : { p, i: flip, type: type === 'A' ? 'RBS' : 'SBR', fresh: false };
+    };
+    const all = [...A.map(i => mk(i, 'A')), ...V.map(i => mk(i, 'V'))].filter(Boolean).sort((a, b) => b.i - a.i), levels = [];
+    for (const L of all) if (!levels.some(q => Math.abs(q.p - L.p) < atr * 0.3)) levels.push(L);
+    levels.sort((a, b) => Math.abs(a.p - last) - Math.abs(b.p - last)); levels.length = Math.min(levels.length, 8);
+    // 2) OCL gap: unfilled gap between previous close and next open
+    const gaps = [];
+    for (let i = Math.max(1, n - 250); i < n; i++){
+      const up = o[i] - c[i-1]; if (Math.abs(up) < atr * 0.25) continue;
+      const lo = Math.min(o[i], c[i-1]), hi = Math.max(o[i], c[i-1]);
+      let filled = false; for (let j = i; j < n; j++) if (up > 0 ? l[j] <= lo : h[j] >= hi){ filled = true; break; }
+      if (!filled) gaps.push({ i, lo, hi, bull: up > 0 });
+    }
+    gaps.sort((a, b) => Math.abs((a.lo + a.hi) / 2 - last) - Math.abs((b.lo + b.hi) / 2 - last)); gaps.length = Math.min(gaps.length, 5);
+    // 3) trendline through swing closes (V for uptrend, A for downtrend); touches counted along the line
+    const tls = [];
+    const tl = (pts, up) => {
+      for (let k = pts.length - 2; k >= Math.max(0, pts.length - 4); k--){
+        const i1 = pts[k], i2 = pts[k+1], slope = (c[i2] - c[i1]) / (i2 - i1);
+        if (up ? slope <= 0 : slope >= 0) continue;
+        const at = x => c[i1] + slope * (x - i1);
+        let ok = true; for (let j = i1; j < n; j++) if (up ? c[j] < at(j) - atr * 0.3 : c[j] > at(j) + atr * 0.3){ ok = false; break; }
+        if (!ok) continue;
+        tls.push({ i1, slope, base: c[i1], up, touches: pts.filter(q => q >= i1 && Math.abs(c[q] - at(q)) <= atr * 0.3).length }); return;
+      }
+    };
+    tl(V, true); tl(A, false);
+    // 4) IFVG (inverted FVG) and BPR (bull FVG overlapping bear FVG)
+    const bull = [], bear = [];
+    for (let i = Math.max(2, n - 300); i < n; i++){
+      if (l[i] - h[i-2] > atr * 0.1) bull.push({ i, lo: h[i-2], hi: l[i] });
+      if (l[i-2] - h[i] > atr * 0.1) bear.push({ i, lo: h[i], hi: l[i-2] });
+    }
+    const ifvg = [];
+    for (const f of bull){ for (let j = f.i + 1; j < n; j++) if (c[j] < f.lo){ if (!c.slice(j + 1).some(x => x > f.hi)) ifvg.push({ i: j, lo: f.lo, hi: f.hi, dir: 'bear' }); break; } }
+    for (const f of bear){ for (let j = f.i + 1; j < n; j++) if (c[j] > f.hi){ if (!c.slice(j + 1).some(x => x < f.lo)) ifvg.push({ i: j, lo: f.lo, hi: f.hi, dir: 'bull' }); break; } }
+    const bpr = [];
+    for (const b of bull) for (const r of bear){
+      const lo = Math.max(b.lo, r.lo), hi = Math.min(b.hi, r.hi);
+      if (hi > lo && Math.abs(b.i - r.i) <= 15) bpr.push({ i: Math.max(b.i, r.i), lo, hi });
+    }
+    const near = z => Math.abs((z.lo + z.hi) / 2 - last);
+    ifvg.sort((a, b) => near(a) - near(b)); ifvg.length = Math.min(ifvg.length, 3);
+    bpr.sort((a, b) => b.i - a.i); bpr.length = Math.min(bpr.length, 2);
+    const v = { levels, gaps, tls, ifvg, bpr };
+    if (!noCache) snrC = { k: key, v }; return v;
+  }
+  function paintSnR(pw, ph){
+    const I = state.ict; if (!I || !(I.snr || I.ocl || I.tl || I.ifvg) || candles.length < 30) return;
+    const D = snrCompute(), n = candles.length, d = decimals(candles[n-1].close), xs = i => Math.max(0, X(i) == null ? 0 : X(i));
+    const box = (i, lo, hi, fill, stroke, text, tc) => {
+      const y1 = Y(hi), y2 = Y(lo); if (y1 == null || y2 == null) return;
+      frect(xs(i), Math.min(y1, y2), pw, Math.max(y1, y2), fill, stroke);
+      label(text, xs(i) + 4, Math.min(y1, y2) + 9, tc);
+      const ym = Y((lo + hi) / 2); if (ym != null){ seg(xs(i), ym, pw, ym, stroke, [3, 3], 1); label('CE', pw - 26, ym - 7, tc); }
+    };
+    if (I.snr) for (const L of D.levels){
+      const y = Y(L.p); if (y == null) continue;
+      const res = L.type === 'A' || L.type === 'SBR', col = res ? '239,91,91' : '46,189,155';
+      seg(xs(L.i), y, pw, y, `rgba(${col},${L.fresh ? .95 : .6})`, (L.type === 'RBS' || L.type === 'SBR') ? [6, 4] : null, L.fresh ? 1.6 : 1);
+      label(`${L.type}${L.fresh ? ' fresh' : ''} ${fmt(L.p, d)}`, xs(L.i) + 4, y - 8, `rgba(${col},1)`);
+    }
+    if (I.ocl) for (const g of D.gaps){
+      const y1 = Y(g.hi), y2 = Y(g.lo); if (y1 == null || y2 == null) continue;
+      const col = g.bull ? '46,189,155' : '239,91,91';
+      frect(xs(g.i), Math.min(y1, y2), pw, Math.max(y1, y2), `rgba(${col},.12)`, `rgba(${col},.6)`);
+      label(g.bull ? 'OCL ↑' : 'OCL ↓', xs(g.i) + 4, Math.min(y1, y2) + 9, `rgba(${col},1)`);
+    }
+    if (I.tl) for (const t of D.tls){
+      const xa = X(t.i1), xb = X(n + 20), ya = Y(t.base), yb = Y(t.base + t.slope * (n + 20 - t.i1)); if ([xa, xb, ya, yb].includes(null)) continue;
+      const col = t.up ? 'rgba(77,163,255,.95)' : 'rgba(233,185,73,.95)';
+      seg(xa, ya, xb, yb, col, null, 1.4);
+      label(`TL${t.up ? '↑' : '↓'} ${t.touches} จุด` + (t.touches === 2 ? ' · รอจุดที่ 3' : t.touches > 2 ? ` · จุดที่ ${t.touches + 1} = โซนเข้า` : ''), Math.max(0, xb - 190), yb - 8, col);
+      for (const L of D.levels){
+        const x = t.i1 + (L.p - t.base) / t.slope; if (!(x >= n - 4 && x <= n + 25)) continue;
+        const px = X(x), py = Y(L.p); if (px == null || py == null) continue;
+        seg(px - 6, py - 6, px + 6, py + 6, 'rgba(255,214,10,1)', null, 2); seg(px - 6, py + 6, px + 6, py - 6, 'rgba(255,214,10,1)', null, 2);
+        label('X', px + 8, py - 8, 'rgba(255,214,10,1)');
+      }
+    }
+    if (I.ifvg){
+      for (const z of D.ifvg) box(z.i, z.lo, z.hi, 'rgba(255,159,67,.14)', 'rgba(255,159,67,.8)', 'IFVG ' + (z.dir === 'bear' ? '↓' : '↑'), 'rgba(255,159,67,1)');
+      for (const z of D.bpr) box(z.i, z.lo, z.hi, 'rgba(198,120,221,.16)', 'rgba(198,120,221,.85)', 'BPR', 'rgba(198,120,221,1)');
+    }
+  }
+
+  $('ictTools').querySelectorAll('[data-ict]').forEach(i => i.checked = !!state.ict[i.dataset.ict]);
+  $('ictN').value = String(state.ictN);
+  $('ictTools').addEventListener('change', e => {
+    if (e.target.dataset.ict) state.ict[e.target.dataset.ict] = e.target.checked ? 1 : 0;
+    else if (e.target.id === 'ictN') state.ictN = e.target.value;
+    save(); bump();
+  });
+
+
+  // ================= Gold dashboard (multi-timeframe summary) =================
+  const GTF = [['M','1month','รายเดือน'], ['W','1week','รายสัปดาห์'], ['D','1day','รายวัน'], ['H4','4h','4 ชั่วโมง'], ['H1','1h','1 ชั่วโมง']];
+  const GTFCHART = { D:'1d', H4:'4h', H1:'1h' };
+  let gd = { data: null, at: 0, busy: false, sym: 'XAUUSD' };
+  function gdAnalyze(arr){
+    const n = arr.length; if (n < 55) return null;
+    const c = arr.map(x => x.close), last = c[n-1];
+    const e20 = ema(c, 20)[n-1], e50 = ema(c, 50)[n-1];
+    const trend = last > e20 && e20 > e50 ? 1 : last < e20 && e20 < e50 ? -1 : 0;
+    let g = 0, lo = 0; for (let i = 1; i <= 14; i++){ const d = c[i] - c[i-1]; if (d > 0) g += d; else lo -= d; }
+    g /= 14; lo /= 14;
+    for (let i = 15; i < n; i++){ const d = c[i] - c[i-1]; g = (g * 13 + Math.max(d, 0)) / 14; lo = (lo * 13 + Math.max(-d, 0)) / 14; }
+    const rsi = lo === 0 ? 100 : 100 - 100 / (1 + g / lo);
+    const S = snrCompute(arr, true), r = po3Range(arr, 'auto');
+    const up = S.levels.filter(L => L.p > last).sort((a, b) => a.p - b.p)[0], dn = S.levels.filter(L => L.p < last).sort((a, b) => b.p - a.p)[0];
+    const pos = (r.hi - last) / r.size * 100; let za = 0, zb = 100;
+    for (const q of GB){ if (q <= pos) za = q; }
+    for (const q of [...GB].reverse()){ if (q >= pos) zb = q; }
+    return { last, trend, rsi, up, dn, S, r, pos, zone: `${GBN[za]} ${za} → ${GBN[zb]} ${zb}`, side: pos < 50 ? 'Premium' : pos > 50 ? 'Discount' : 'EQ' };
+  }
+  async function goldDash(force){
+    const out = $('gdOut'), msg = $('gdMsg');
+    if (!cred.td){ out.innerHTML = '<p class="stat">ต้องใช้ Twelve Data API Key กดปุ่ม API Key ในแท็บ "กราฟ" แล้วใส่ในช่องล่างสุด</p>'; return; }
+    if (gd.busy) return;
+    const sym = $('gdPick').value;
+    if (!force && gd.data && gd.sym === sym && Date.now() - gd.at < 600000){ gdRender(); return; }
+    gd.busy = true; $('gdGo').disabled = true; const data = {};
+    for (let i = 0; i < GTF.length; i++){
+      const [k, iv] = GTF[i]; msg.textContent = `กำลังโหลด ${k} (${i + 1}/${GTF.length})...`;
+      try {
+        const j = await tdFetch(`time_series?symbol=${encodeURIComponent(tdSym(sym))}&interval=${iv}&outputsize=300&timezone=UTC&order=ASC`);
+        const arr = (j.values || []).map(tdCandle).sort((a, b) => a.time - b.time);
+        data[k] = { arr, a: gdAnalyze(arr) };
+      } catch(e){ data[k] = { err: e.message }; if (/limit|credit|minute/i.test(e.message)) break; }
+    }
+    gd = { data, at: Date.now(), busy: false, sym }; $('gdGo').disabled = false;
+    gdRender();
+  }
+  function gdRender(){
+    const out = $('gdOut'), { data, sym } = gd, ok = GTF.filter(t => data[t[0]] && data[t[0]].a);
+    $('gdMsg').textContent = 'อัปเดต ' + new Date(gd.at).toLocaleTimeString() + ' · รีเฟรชอัตโนมัติไม่มี กดรีเฟรชเอง (ใช้ 5 เครดิตต่อครั้ง)';
+    if (!ok.length){ out.innerHTML = '<p class="down">โหลดไม่สำเร็จ: ' + (Object.values(data).map(x => x.err).filter(Boolean)[0] || 'ไม่มีข้อมูล') + '</p>'; return; }
+    const h1 = (data.H1 && data.H1.a) || data[ok[ok.length-1][0]].a, d = d2 => decimals(d2), dd = d(h1.last);
+    const bull = ok.filter(t => data[t[0]].a.trend > 0).length, bear = ok.filter(t => data[t[0]].a.trend < 0).length;
+    const bias = bull >= 4 ? 'ขาขึ้นเด่น' : bull === 3 && bear <= 1 ? 'เอนขาขึ้น' : bear >= 4 ? 'ขาลงเด่น' : bear === 3 && bull <= 1 ? 'เอนขาลง' : 'ผสม / ไซด์เวย์';
+    const cls = bull > bear ? 'up' : bear > bull ? 'down' : '';
+    const ha = data.D && data.D.a, la = data.H1 && data.H1.a;
+    const note = ha && la && ha.trend && la.trend && ha.trend !== la.trend ? 'H1 สวนทิศกับ D: น่าจะเป็นช่วงย่อหรือเด้ง รอ rejection ที่ SnR หรือ FVG ใน TF ใหญ่ก่อน' : 'ทิศ H1 ไม่ขัดกับ D ใช้ SnR ใน TF เล็กหาจุดเข้าตามทิศ TF ใหญ่';
+    let chg = '-'; const ar = data.H1 && data.H1.arr;
+    if (ar && ar.length){ const l = ar[ar.length-1]; const p = [...ar].reverse().find(x => x.time <= l.time - 86400); if (p){ const v = (l.close - p.close) / p.close * 100; chg = `<span class="${v >= 0 ? 'up' : 'down'}">${v >= 0 ? '+' : ''}${v.toFixed(2)}%</span>`; } }
+    const trTxt = t => t > 0 ? '<span class="up">ขาขึ้น</span>' : t < 0 ? '<span class="down">ขาลง</span>' : '<span class="stat">ผสม</span>';
+    const lv = (L, dir) => L ? `${L.type}${L.fresh ? ' fresh' : ''} <b>${fmt(L.p, d(L.p))}</b> <span class="stat">(${dir}${(Math.abs(L.p - h1.last) / h1.last * 100).toFixed(2)}%)</span>` : '-';
+    let rows = '';
+    for (const [k, , name] of GTF){
+      const x = data[k]; if (!x) continue;
+      if (!x.a){ rows += `<tr><td>${k}</td><td colspan="7" class="stat">${x.err ? 'ผิดพลาด: ' + x.err : 'ข้อมูลไม่พอ'}</td></tr>`; continue; }
+      const a = x.a, S = a.S;
+      const extra = [S.gaps[0] ? `OCL ${S.gaps[0].bull ? '↑' : '↓'} ${fmt(S.gaps[0].lo, d(S.gaps[0].lo))}–${fmt(S.gaps[0].hi, d(S.gaps[0].hi))}` : '', S.ifvg.length ? `IFVG ${S.ifvg.length}` : '', S.bpr.length ? `BPR ${S.bpr.length}` : '', S.tls[0] ? `TL${S.tls[0].up ? '↑' : '↓'} ${S.tls[0].touches} จุด` : ''].filter(Boolean).join(' · ') || '-';
+      rows += `<tr><td><b>${k}</b><div class="stat">${name}</div></td><td>${trTxt(a.trend)}</td><td class="${a.rsi >= 70 ? 'down' : a.rsi <= 30 ? 'up' : ''}">${a.rsi.toFixed(0)}</td><td>${lv(a.up, '+')}</td><td>${lv(a.dn, '−')}</td><td>PO3 ${a.r.size}<div class="stat">${a.side} · ${a.zone}</div></td><td class="stat">${extra}</td><td>${GTFCHART[k] ? `<button class="btn mini" data-gt="${GTFCHART[k]}">กราฟ</button>` : ''}</td></tr>`;
+    }
+    // confluence of levels from different timeframes (within 0.2% of price)
+    const pool = []; for (const [k] of GTF){ const x = data[k]; if (x && x.a) for (const L of x.a.S.levels) pool.push({ p: L.p, k, t: L.type }); }
+    pool.sort((a, b) => a.p - b.p); const cl = []; let cur = [];
+    for (const it of pool){ if (cur.length && it.p - cur[cur.length-1].p > h1.last * 0.002){ cl.push(cur); cur = []; } cur.push(it); } if (cur.length) cl.push(cur);
+    const conf = cl.filter(g => new Set(g.map(x => x.k)).size >= 2).map(g => ({ lo: g[0].p, hi: g[g.length-1].p, tfs: [...new Set(g.map(x => x.k))].join('+'), types: [...new Set(g.map(x => x.t))].join('/') }))
+      .sort((a, b) => Math.abs((a.lo + a.hi) / 2 - h1.last) - Math.abs((b.lo + b.hi) / 2 - h1.last)).slice(0, 5);
+    out.innerHTML = `<div class="cards">
+      <div class="card2"><span class="stat">${sym} (ล่าสุดจาก H1)</span><b>${fmt(h1.last, dd)}</b><span class="stat">24 ชม. ${chg}</span></div>
+      <div class="card2"><span class="stat">ภาพรวมแนวโน้ม (${ok.length} TF)</span><b class="${cls}">${bias}</b><span class="stat">ขึ้น ${bull} · ลง ${bear} · ผสม ${ok.length - bull - bear}</span></div>
+      <div class="card2" style="flex:2"><span class="stat">ข้อสังเกตจากกฎ MTF (Alchemist)</span><div style="margin-top:4px">${note}</div></div></div>
+      <table class="tbl"><tr><th>TF</th><th>แนวโน้ม<div class="stat">ราคา/EMA20/EMA50</div></th><th>RSI</th><th>แนวต้านใกล้สุด</th><th>แนวรับใกล้สุด</th><th>PO3 / Goldbach</th><th>อื่นๆ</th><th></th></tr>${rows}</table>
+      <h3>จุดที่หลาย TF ซ้อนกัน (confluence ภายใน 0.2%)</h3>
+      ${conf.length ? '<table class="tbl"><tr><th>โซนราคา</th><th>TF</th><th>ชนิดเส้น</th><th>ห่างจากราคา</th></tr>' + conf.map(z => { const m = (z.lo + z.hi) / 2; return `<tr><td><b>${fmt(z.lo, d(z.lo))}${z.hi - z.lo > 0.005 ? ' – ' + fmt(z.hi, d(z.hi)) : ''}</b></td><td>${z.tfs}</td><td>${z.types}</td><td class="${m > h1.last ? 'down' : 'up'}">${m > h1.last ? 'ต้านเหนือ ' : 'รับใต้ '}${(Math.abs(m - h1.last) / h1.last * 100).toFixed(2)}%</td></tr>`; }).join('') + '</table>' : '<p class="stat">ยังไม่พบเส้น SnR ที่ซ้อนกันข้าม TF ในระยะใกล้ราคา</p>'}
+      <p class="warn">สรุปนี้คำนวณจากราคาปิดด้วยกฎ SnR (A/V), PO3/Goldbach และ EMA20/50 แบบอัตโนมัติ ไม่ใช่คำแนะนำการลงทุน แนวโน้มคือราคา &gt; EMA20 &gt; EMA50 (ขึ้น) หรือกลับกัน (ลง) นอกเหนือจากนั้นนับเป็น "ผสม" เส้น SnR สูงสุด 8 เส้นต่อ TF ที่ใกล้ราคาที่สุด</p>`;
+  }
+  $('gdGo').onclick = () => goldDash(true);
+  $('gdPick').onchange = () => goldDash(true);
+  $('gdOut').addEventListener('click', e => {
+    const tf = e.target.dataset.gt; if (!tf) return;
+    state.symbol = gd.sym; state.tf = tf; save(); syncUI(); showView('vChart'); load(); refreshStar();
+  });
+
+  // ================= tabs / favorites / screener =================
+  const PROMPT = `คุณคือ "Hedge Fund Swing Trader" มืออาชีพที่เชี่ยวชาญการทำกำไรระยะสั้น-กลาง (1-3 เดือน) ในตลาดหุ้นสหรัฐฯ โดยเน้นกลยุทธ์ Trend Following และ Catalyst Trading
+
+นี่คือรายชื่อหุ้นสหรัฐฯ ที่มีโมเมนตัมขาขึ้นแข็งแกร่งในปัจจุบัน: [ {{T}} ]
+
+จงวิเคราะห์หุ้นเหล่านี้อย่างเข้มข้นเพื่อค้นหาหุ้นที่ดีที่สุด 2 ตัวสำหรับการเข้าซื้อแบบ Swing Trade โดยใช้หลักเกณฑ์ต่อไปนี้:
+
+1. Institutional Accumulation & Volume Structure
+- วิเคราะห์ว่าในช่วง 2-4 สัปดาห์ที่ผ่านมา มีสัญญาณการเก็บหุ้นของสถาบัน (Institutional Buying) หรือไม่ โดยดูจากวอลุ่มในวันที่ราคาปิดเขียวเข้ม (Heavy Volume on Up Days) เทียบกับวันพักตัว
+- หุ้นตัวไหนมีลักษณะ "Low Float" หรือ "High Short Interest" ที่มีโอกาสเกิด Short Squeeze หากมีปัจจัยบวกเข้ามาหนุน?
+
+2. Near-term Catalysts Within 30-90 Days
+- ตรวจสอบวันประกาศผลประกอบการ (Earnings Call) หรือการประชุมสัมมนาใหญ่ (Industry Conferences) ที่กำลังจะเกิดขึ้นในอีก 1-3 เดือนข้างหน้า
+- หุ้นตัวไหนมีประวัติการ "Earnings Beat" (งบดีกว่าคาด) และมักจะเกิด Price Gap-Up หลังงบออก?
+
+3. Technical Setup & Relative Strength
+- ประเมินโครงสร้างราคา (Price Action) ว่าตัวไหนกำลังทำแพทเทิร์นสร้างฐานเพื่อไปต่อ เช่น Bull Flag, Cup and Handle, หรือ Volatility Contraction Pattern (VCP)
+- วิเคราะห์ Relative Strength (RS) เทียบกับ S&P 500 ในช่วงที่ตลาดพักฐาน หุ้นตัวไหนแข็งแกร่งไม่ยอมลงตามตลาด?
+
+4. Tactical Trade Setup (Action Plan)
+โปรดสรุปแผนการเทรดที่ชัดเจน (Actionable Plan) สำหรับหุ้นที่เลือกในรูปแบบตารางดังนี้:
+- Ticker (ชื่อหุ้น)
+- Setup Rationale (เหตุผลทางเทคนิคและ Catalyst)
+- Ideal Entry Zone (โซนรับที่ปลอดภัย/จุด Buy Breakout)
+- Profit Target (เป้าหมายทำกำไรภายใน 1-3 เดือน อิงตามแนวต้านสำคัญ)
+- Hard Stop Loss (จุดตัดขาดทุนที่ต้องยอม เพื่อรักษาเงินทุน)
+
+โปรดให้คำแนะนำที่เด็ดขาด ตรงไปตรงมาแบบนักเทรดมืออาชีพ ไม่ต้องเกริ่นอารัมภบท`;
+
+  const lsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch(e){ return d; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
+  let favs = lsGet('lcdus_fav', []);
+  const okSym = x => /^[A-Z][A-Z.\-]{0,5}$/.test(x);
+  const parseSyms = t => [...new Set(t.toUpperCase().replace(/X(AU|AG)\/USD/g, 'X$1USD').split(/[^A-Z.\-]+/).filter(okSym))];
+  const pct = x => (x >= 0 ? '+' : '') + x.toFixed(1) + '%';
+
+  function showView(id){
+    ['vChart','vScr','vGold','vFav'].forEach(v => $(v).hidden = v !== id);
+    $('nav').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === id));
+    if (id === 'vChart') setTimeout(() => window.dispatchEvent(new Event('resize')), 30);
+    if (id === 'vFav') loadFavs();
+    if (id === 'vGold') goldDash(false);
+  }
+  $('nav').addEventListener('click', e => { const b = e.target.closest('button[data-v]'); if (b) showView(b.dataset.v); });
+  function openChart(sym){ state.symbol = sym; save(); syncUI(); showView('vChart'); load(); refreshStar(); }
+
+  function refreshStar(){
+    const on = favs.includes(state.symbol);
+    $('favBtn').textContent = on ? '★' : '☆'; $('favBtn').classList.toggle('on', on);
+    $('favCnt').textContent = favs.length;
+  }
+  function toggleFav(sym){
+    favs = favs.includes(sym) ? favs.filter(x => x !== sym) : favs.concat(sym);
+    if (!favs.includes(sym) && alerts[sym]){ delete alerts[sym]; lsSet('lcdus_al', alerts); syncSrv(); }
+    lsSet('lcdus_fav', favs); refreshStar();
+    if (!$('vFav').hidden) loadFavs();
+    document.querySelectorAll('#scrOut .star').forEach(b => { const on = favs.includes(b.dataset.s); b.textContent = on ? '★' : '☆'; b.classList.toggle('on', on); });
+  }
+  $('favBtn').onclick = () => toggleFav(state.symbol);
+
+  // ---- favorites tab ----
+  let favTimer = null;
+  async function loadFavs(){
+    clearTimeout(favTimer);
+    const out = $('favOut');
+    if (!favs.length){ out.innerHTML = '<p class="stat">ยังไม่มีหุ้นรายการโปรด กดดาว ☆ ที่หน้ากราฟ หรือที่ผลคัดหุ้น หรือพิมพ์ชื่อด้านบน</p>'; return; }
+    let snap = {};
+    if (cred.key && cred.secret){
+      try {
+        const r = await fetch(`${HOST.replace('/stocks/','/stocks/snapshots')}?symbols=${favs.filter(f => !isGold(f)).join(',')}&feed=${cred.feed}`, { headers: hdr() });
+        if (r.ok) snap = await r.json();
+      } catch(e){}
+    }
+    if ($('vFav').hidden) return;
+    if (out.contains(document.activeElement) && document.activeElement.tagName === 'INPUT'){ favTimer = setTimeout(loadFavs, 15000); return; }
+    out.innerHTML = '<table class="tbl"><tr><th></th><th>หุ้น</th><th>ราคา</th><th>เปลี่ยนแปลงวันนี้</th><th>สูง / ต่ำ วันนี้</th><th>จุด Entry</th><th>สถานะ</th><th></th></tr>' + favs.map(f => {
+      const s = snap[f] || {}, lp = s.latestTrade && s.latestTrade.p, pc = s.prevDailyBar && s.prevDailyBar.c, db = s.dailyBar;
+      const ch = lp != null && pc ? (lp - pc) / pc * 100 : null;
+      return `<tr><td><button class="star on" data-f="${f}" title="ลบออก">★</button></td><td class="tk" data-o="${f}">${f}</td><td>${lp != null ? fmt(lp, decimals(lp)) : '-'}</td><td class="${ch == null ? '' : ch >= 0 ? 'up' : 'down'}">${ch == null ? '-' : pct(ch)}</td><td>${db ? fmt(db.h, decimals(db.h)) + ' / ' + fmt(db.l, decimals(db.l)) : '-'}</td><td><input data-e="${f}" value="${alerts[f] ? alerts[f].entry : ''}" placeholder="ราคา" inputmode="decimal" style="width:92px"></td><td>${statusOf(f, lp)}</td><td><button class="btn mini" data-o="${f}">ดูกราฟ</button></td></tr>`;
+    }).join('') + '</table>';
+    favTimer = setTimeout(loadFavs, 15000);
+  }
+  $('favOut').addEventListener('click', e => {
+    if (e.target.dataset.f) toggleFav(e.target.dataset.f);
+    else if (e.target.dataset.o) openChart(e.target.dataset.o);
+  });
+  const addFav = () => { parseSyms($('favIn').value).forEach(x => { if (!favs.includes(x)) favs.push(x); }); lsSet('lcdus_fav', favs); $('favIn').value = ''; refreshStar(); loadFavs(); };
+  $('favAdd').onclick = addFav;
+  $('favIn').addEventListener('keydown', e => { if (e.key === 'Enter') addFav(); });
+
+  // ---- screener tab ----
+  async function dailyBars(sym){
+    const start = new Date(Date.now() - 430 * 864e5).toISOString();
+    const r = await fetch(`${HOST}${encodeURIComponent(sym)}/bars?timeframe=1Day&start=${encodeURIComponent(start)}&limit=1000&sort=asc&adjustment=split&feed=${cred.feed}`, { headers: hdr() });
+    if (!r.ok) throw new Error(sym + ' (HTTP ' + r.status + ')');
+    return (await r.json()).bars || [];
+  }
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+
+  function scoreStock(sym, b, spy){
+    const n = b.length; if (n < 120) return null;
+    const C = b.map(x => x.c), H = b.map(x => x.h), L = b.map(x => x.l), V = b.map(x => x.v);
+    const e20 = ema(C, 20)[n-1], e50 = ema(C, 50)[n-1], e200 = ema(C, 200)[n-1];
+    const tr = b.map((x, i) => i ? Math.max(x.h - x.l, Math.abs(x.h - C[i-1]), Math.abs(x.l - C[i-1])) / C[i-1] : 0);
+    const atr = atrCalc(b.map(x => ({ high: x.h, low: x.l, close: x.c })), 14)[n-1] || C[n-1] * 0.03;
+    // 1) accumulation, last 20 sessions
+    let up = 0, dn = 0, heavy = 0; const v50 = avg(V.slice(-70, -20));
+    for (let i = n - 20; i < n; i++){
+      if (C[i] >= C[i-1]) up += V[i]; else dn += V[i];
+      if (C[i] > C[i-1] * 1.02 && V[i] > 1.5 * v50) heavy++;
+    }
+    const ud = up / Math.max(dn, 1);
+    // 2) relative strength vs SPY
+    const sm = new Map(spy.map(x => [x.t.slice(0, 10), x.c]));
+    const ret63 = (C[n-1] / C[n-64] - 1) * 100;
+    const sp63 = spy.length > 64 ? (spy[spy.length-1].c / spy[spy.length-64].c - 1) * 100 : 0;
+    const edge = [];
+    for (let i = n - 60; i < n; i++){
+      const d = b[i].t.slice(0, 10), pd = b[i-1].t.slice(0, 10);
+      if (sm.has(d) && sm.has(pd)){ const mr = sm.get(d) / sm.get(pd) - 1; if (mr < -0.002) edge.push((C[i] / C[i-1] - 1 - mr) * 100); }
+    }
+    const downEdge = avg(edge);
+    // 3) setup: volatility contraction + near high
+    const contr = avg(tr.slice(-10)) / Math.max(avg(tr.slice(-50, -10)), 1e-9);
+    const hi52 = Math.max(...H.slice(-252)), near = C[n-1] / hi52;
+    const score = clamp((ud - 0.8) / 0.9, 0, 1) * 24 + Math.min(heavy, 3) * 2
+      + clamp((ret63 - sp63) / 25, 0, 1) * 20 + clamp(downEdge / 1, 0, 1) * 10
+      + (C[n-1] > e20 ? 5 : 0) + (e20 > e50 ? 5 : 0) + (e200 && e50 > e200 ? 5 : 0)
+      + clamp((1.1 - contr) / 0.5, 0, 1) * 12 + clamp((near - 0.8) / 0.18, 0, 1) * 13;
+    const tags = [];
+    if (ud >= 1.3) tags.push('Accumulation'); if (heavy >= 2) tags.push('Heavy-vol up');
+    if (ret63 - sp63 > 5) tags.push('RS นำ SPY'); if (downEdge > 0.3) tags.push('ไม่ลงตามตลาด');
+    if (contr < 0.8) tags.push('VCP/ตีบแคบ'); if (near > 0.93) tags.push('ใกล้ high 52w');
+    // trade plan
+    const pivot = Math.max(...H.slice(-20)), entry = pivot * 1.002;
+    let stop = Math.min(...L.slice(-10)) - 0.25 * atr; if (entry - stop > 3 * atr) stop = entry - 3 * atr;
+    const risk = entry - stop, d = decimals(entry);
+    return { sym, entry, score, ud, heavy, rs: ret63 - sp63, downEdge, contr, near, tags, last: C[n-1], d,
+      zone: `${fmt(pivot, d)} – ${fmt(pivot + 0.5 * atr, d)} (Buy breakout) หรือรับย่อ ${fmt(e20, d)} – ${fmt(e20 + 0.5 * atr, d)}`,
+      t1: entry + 2 * risk, t2: entry + 3 * risk, stop, hi52,
+      why: `Up/Down vol ${ud.toFixed(2)}x, heavy-up ${heavy} วัน, RS 63 วัน ${pct(ret63 - sp63)} เทียบ SPY, ATR% ช่วง 10 วันล่าสุด ${(contr * 100).toFixed(0)}% ของช่วงก่อนหน้า, ราคา ${(near * 100).toFixed(0)}% ของ high 52 สัปดาห์` };
+  }
+
+  const buildPrompt = () => { const t = parseSyms($('scrIn').value); $('scrPrompt').value = PROMPT.replace('{{T}}', t.length ? t.join(', ') : 'ใส่ชื่อย่อหุ้น'); };
+  $('scrIn').value = lsGet('lcdus_scr', 'PLTR, CELH, AMD, NET');
+  $('scrIn').addEventListener('input', buildPrompt); buildPrompt();
+  $('copyP').onclick = async () => {
+    try { await navigator.clipboard.writeText($('scrPrompt').value); $('copyMsg').textContent = 'คัดลอกแล้ว'; }
+    catch(e){ $('scrPrompt').select(); $('copyMsg').textContent = 'เลือกข้อความแล้ว กด Ctrl+C'; }
+  };
+
+  let scrRes = [];
+  $('scrGo').onclick = async () => {
+    const syms = parseSyms($('scrIn').value).filter(x => x !== 'SPY'), out = $('scrOut');
+    if (!syms.length){ out.innerHTML = '<p class="stat">ใส่ชื่อย่อหุ้นอย่างน้อย 1 ตัว</p>'; return; }
+    if (!cred.key || !cred.secret){ out.innerHTML = '<p class="stat">ยังไม่ได้ใส่ API Key กดที่แท็บ "กราฟ" แล้วกดปุ่ม API Key</p>'; return; }
+    lsSet('lcdus_scr', $('scrIn').value); buildPrompt(); $('scrGo').disabled = true;
+    const res = [], bad = [];
+    try {
+      out.innerHTML = '<p class="stat">กำลังโหลด SPY...</p>';
+      const spy = await dailyBars('SPY');
+      for (let i = 0; i < syms.length; i++){
+        out.innerHTML = `<p class="stat">กำลังวิเคราะห์ ${syms[i]} (${i + 1}/${syms.length})...</p>`;
+        try { const r = scoreStock(syms[i], await dailyBars(syms[i]), spy); r ? res.push(r) : bad.push(syms[i]); } catch(e){ bad.push(syms[i]); }
+      }
+    } catch(e){ out.innerHTML = '<p class="down">โหลดไม่สำเร็จ: ' + e.message + '</p>'; $('scrGo').disabled = false; return; }
+    $('scrGo').disabled = false;
+    res.sort((a, b) => b.score - a.score); scrRes = res;
+    const star = s => `<button class="star${favs.includes(s) ? ' on' : ''}" data-s="${s}" title="รายการโปรด">${favs.includes(s) ? '★' : '☆'}</button>`;
+    const top = res.slice(0, 2);
+    out.innerHTML = '<table class="tbl"><tr><th>#</th><th></th><th>หุ้น</th><th>คะแนน</th><th>Up/Down Vol</th><th>RS vs SPY (63d)</th><th>สัญญาณ</th></tr>' +
+      res.map((r, i) => `<tr class="${i < 2 ? 'top' : ''}"><td>${i + 1}</td><td>${star(r.sym)}</td><td class="tk" data-o="${r.sym}">${r.sym}</td><td><i class="scorebar" style="width:${r.score * 0.6}px"></i>${r.score.toFixed(0)}</td><td>${r.ud.toFixed(2)}x</td><td class="${r.rs >= 0 ? 'up' : 'down'}">${pct(r.rs)}</td><td>${r.tags.map(t => `<span class="tag2">${t}</span>`).join('') || '-'}</td></tr>`).join('') + '</table>' +
+      (bad.length ? `<p class="stat">ข้ามเพราะดึงข้อมูลไม่ได้หรือข้อมูลไม่พอ: ${bad.join(', ')}</p>` : '') +
+      (top.length ? '<h3>Tactical Trade Setup: 2 อันดับแรก</h3><table class="tbl"><tr><th>Ticker</th><th>Setup Rationale</th><th>Ideal Entry Zone</th><th>Profit Target</th><th>Hard Stop Loss</th></tr>' +
+        top.map(r => `<tr><td class="tk" data-o="${r.sym}">${r.sym}<div class="stat">${fmt(r.last, r.d)}</div><button class="btn mini" data-al="${r.sym}" data-en="${r.entry.toFixed(r.d)}">🔔 ตั้งเตือน Entry</button></td><td>${r.why}<div class="stat">Catalyst / งบ / Short interest: ยังไม่ได้ตรวจ ให้ใช้ prompt ด้านล่าง</div></td><td>${r.zone}</td><td class="up">T1 ${fmt(r.t1, r.d)} (2R)<br>T2 ${fmt(r.t2, r.d)} (3R)<div class="stat">high 52w ${fmt(r.hi52, r.d)}</div></td><td class="down">${fmt(r.stop, r.d)}</td></tr>`).join('') + '</table>' : '') +
+      '<p class="warn">การจัดอันดับคำนวณจากราคาและวอลุ่มรายวันเท่านั้น (ข้อ 1 ส่วนวอลุ่ม และข้อ 3) ส่วน Catalyst, วันงบ, Float และ Short Interest ไม่มีในข้อมูล Alpaca ต้องใช้ prompt ด้านล่างกับ AI ที่ค้นเว็บได้ แผนเข้า-ออกเป็นสูตรอัตโนมัติ ไม่ใช่คำแนะนำการลงทุน</p>';
+  };
+  $('scrOut').addEventListener('click', e => {
+    if (e.target.dataset.al){
+      const s = e.target.dataset.al;
+      if (!favs.includes(s)){ favs.push(s); lsSet('lcdus_fav', favs); }
+      setAlert(s, +e.target.dataset.en); refreshStar(); e.target.textContent = 'ตั้งเตือนแล้ว ✓ (แก้ราคาได้ที่แท็บรายการโปรด)';
+    } else if (e.target.dataset.s) toggleFav(e.target.dataset.s);
+    else if (e.target.dataset.o) openChart(e.target.dataset.o);
+  });
+  // ---- entry alerts ----
+  let alerts = lsGet('lcdus_al', {}), thr = +lsGet('lcdus_thr', 1) || 1;
+  function setAlert(sym, entry){
+    if (entry > 0) alerts[sym] = { entry, side: null, near: false, hit: false }; else delete alerts[sym];
+    lsSet('lcdus_al', alerts); syncSrv();
+  }
+  function statusOf(f, lp){
+    const a = alerts[f]; if (!a) return '<span class="stat">-</span>'; if (lp == null) return '-';
+    const d = (lp - a.entry) / a.entry * 100, near = Math.abs(d) <= thr;
+    return `<span class="${a.hit ? 'up' : near ? 'up' : ''}">${a.hit ? '<b>ถึง Entry</b> · ' : near ? '<b>ใกล้ Entry</b> · ' : ''}${d >= 0 ? '+' : ''}${d.toFixed(2)}%</span>`;
+  }
+  let actx = null;
+  function beep(){
+    try { actx = actx || new AudioContext(); actx.resume();
+      [0, .18].forEach(t => { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = 880; g.gain.value = .15; o.connect(g); g.connect(actx.destination); o.start(actx.currentTime + t); o.stop(actx.currentTime + t + .12); });
+    } catch(e){}
+  }
+  function notify(title, body){
+    const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<b>${title}</b><div>${body}</div>`;
+    t.onclick = () => t.remove(); $('toasts').appendChild(t); setTimeout(() => t.remove(), 30000);
+    beep();
+    try { if (window.Notification && Notification.permission === 'granted') new Notification(title, { body }); } catch(e){}
+  }
+  function evalAlert(s, lp){
+    const a = alerts[s]; if (!a || !(lp > 0)) return;
+    const d = decimals(a.entry); if (a.side == null) a.side = lp < a.entry ? -1 : 1;
+    const dist = Math.abs(lp - a.entry) / a.entry * 100, onSide = (lp - a.entry) * a.side > 0;
+    if (dist > thr * 2){ a.near = false; if (onSide) a.hit = false; }
+    if (dist <= thr && !a.near){ a.near = true; notify(s + ' ใกล้จุด Entry', `ราคา ${fmt(lp, d)} ห่าง Entry ${fmt(a.entry, d)} อยู่ ${dist.toFixed(2)}%`); }
+    if (!onSide && !a.hit){ a.hit = true; a.near = true; notify(s + ' ถึงจุด Entry', `ราคา ${fmt(lp, d)} แตะ Entry ${fmt(a.entry, d)} แล้ว`); }
+  }
+  let goldAt = 0;
+  async function alertTick(){
+    const all = Object.keys(alerts); if (!all.length) return;
+    const syms = all.filter(x => !isGold(x)), gs = all.filter(isGold);
+    for (const g of gs) if (goldTick.s === g && Date.now() - goldTick.at < 30000) evalAlert(g, goldTick.p);
+    if (gs.length && cred.td && !document.hidden && Date.now() - goldAt > 60000){
+      goldAt = Date.now();
+      for (const g of gs){ if (goldTick.s === g && Date.now() - goldTick.at < 30000) continue; try { evalAlert(g, +(await tdFetch('price?symbol=' + encodeURIComponent(tdSym(g)))).price); } catch(e){} }
+    }
+    if (syms.length && cred.key && cred.secret){
+      try {
+        const r = await fetch(`${HOST}snapshots?symbols=${syms.join(',')}&feed=${cred.feed}`, { headers: hdr() });
+        if (r.ok){ const snap = await r.json(); for (const x of syms){ const lp = snap[x] && snap[x].latestTrade && snap[x].latestTrade.p; if (lp != null) evalAlert(x, lp); } }
+      } catch(e){}
+    }
+    lsSet('lcdus_al', alerts);
+  }
+  setInterval(alertTick, 15000); setTimeout(alertTick, 3000);
+  $('thr').value = String(thr);
+  $('thr').onchange = () => { thr = +$('thr').value; lsSet('lcdus_thr', thr); syncSrv(); loadFavs(); };
+  $('favOut').addEventListener('change', e => {
+    if (e.target.dataset.e){ setAlert(e.target.dataset.e, parseFloat(e.target.value)); loadFavs(); alertTick(); }
+  });
+  const notiLabel = () => { $('notiBtn').textContent = !window.Notification ? 'เบราว์เซอร์ไม่รองรับ' : Notification.permission === 'granted' ? 'แจ้งเตือนบนเบราว์เซอร์: เปิดแล้ว ✓' : 'เปิดแจ้งเตือนบนเบราว์เซอร์'; };
+  $('notiBtn').onclick = async () => { try { await Notification.requestPermission(); } catch(e){} notiLabel(); beep(); };
+  notiLabel();
+
+  // ---- sync alerts to server (Cloudflare Worker) ----
+  let srv = lsGet('lcdus_srv', { url: '', token: '' }), srvT = null;
+  $('srvUrl').value = srv.url; $('srvTok').value = srv.token;
+  function syncSrv(){
+    if (!srv.url || !srv.token) return;
+    clearTimeout(srvT);
+    srvT = setTimeout(async () => {
+      const a = {}; for (const k in alerts) if (!isGold(k)) a[k] = alerts[k].entry;
+      try {
+        const r = await fetch(srv.url.replace(/\/$/, ''), { method: 'PUT', headers: { authorization: 'Bearer ' + srv.token, 'content-type': 'application/json' }, body: JSON.stringify({ thr, alerts: a }) });
+        const j = await r.json();
+        $('srvMsg').textContent = r.ok ? `ซิงก์ขึ้นเซิร์ฟเวอร์แล้ว ${j.count} ตัว (${new Date().toLocaleTimeString()})` : 'ซิงก์ไม่สำเร็จ: ' + (j.error || r.status);
+      } catch(e){ $('srvMsg').textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจ URL'; }
+    }, 400);
+  }
+  $('srvSave').onclick = () => { srv = { url: $('srvUrl').value.trim(), token: $('srvTok').value.trim() }; lsSet('lcdus_srv', srv); syncSrv(); };
+
+  refreshStar();
+
+  syncUI(); syncDraw(); applyIndicators(); updateCard(); load(); requestAnimationFrame(loop);
+})();
+</script>
+<script>
+  document.getElementById('toolsBtn').addEventListener('click', () => {
+    document.body.classList.toggle('tools-open');
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+  });
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
