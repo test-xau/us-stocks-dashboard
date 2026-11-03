@@ -51,6 +51,11 @@
   #mainP{flex:5} #rsiP{flex:2} #macdP{flex:2.5}
   .chart{position:absolute;inset:0}
   #main.draw, #main.draw *{cursor:crosshair !important}
+  /* TradingView hosted chart */
+  #tvChart{position:absolute;inset:0;width:100%;height:100%;background:#0d1117}
+  #tvChart .tradingview-widget-container,#tvChart .tradingview-widget-container__widget{width:100%;height:100%}
+  #tvChart iframe{width:100%!important;height:100%!important}
+  #main,#ov,#card,#rsiP,#macdP,#mainTag{display:none!important}
   #ov{position:absolute;left:0;top:0;pointer-events:none;z-index:4}
   .tag{position:absolute;top:6px;left:10px;z-index:5;pointer-events:none;font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
   .tag b{color:var(--text);font-weight:600}
@@ -145,9 +150,9 @@
 <div class="view" id="vChart">
 <header>
   <div class="sym">
-    <input id="symbol" list="symbols" value="AAPL" aria-label="ชื่อย่อหุ้น" spellcheck="false">
+    <input id="symbol" list="symbols" value="XAUUSD" aria-label="ชื่อย่อหุ้น" spellcheck="false">
     <datalist id="symbols">
-      <option value="AAPL"><option value="NVDA"><option value="TSLA"><option value="MSFT"><option value="AMD">
+      <option value="XAUUSD"><option value="XAGUSD"><option value="AAPL"><option value="NVDA"><option value="TSLA"><option value="MSFT"><option value="AMD">
       <option value="SPY"><option value="QQQ"><option value="CRDO"><option value="MGNI"><option value="AXTI"><option value="AMPL">
     </datalist>
     <button class="btn" id="go">โหลด</button>
@@ -229,6 +234,7 @@
 
 <div id="wrap">
   <div class="panel" id="mainP">
+    <div id="tvChart" aria-label="TradingView real-time chart"></div>
     <div class="tag" id="mainTag"></div>
     <div class="chart" id="main"></div>
     <canvas id="ov"></canvas>
@@ -501,7 +507,7 @@ function smcAnalyze(d, L, livePrice) {
   const TFS = ['1m','5m','15m','1h','4h','1d'];
   const STEP = { '1m':60, '5m':300, '15m':900, '1h':3600, '4h':14400, '1d':86400 };
   const state = {
-    symbol:'AAPL', tf:'5m', swing:5, magnet:1, card:1,
+    symbol:'XAUUSD', tf:'5m', swing:5, magnet:1, card:1,
     on:{ ema20:1, ema50:1, ema200:0, bb:0, vol:1, rsi:1, macd:1 },
     smc:{ struct:1, ob:1, fvg:1, liq:1, pd:0, sr:1, sig:1 },
     ict:{ gb:0, erd:0, lb:0 }, ictN:'auto'
@@ -510,6 +516,7 @@ function smcAnalyze(d, L, livePrice) {
     const s = JSON.parse(localStorage.getItem('lcdus') || '{}');
     for (const k in s) { if (s[k] && typeof s[k]==='object') Object.assign(state[k] || (state[k]={}), s[k]); else state[k] = s[k]; }
   } catch(e){}
+  try { if (!localStorage.getItem('lcdus_tv_migrated_v1')) { state.symbol = 'XAUUSD'; state.tf = '5m'; localStorage.setItem('lcdus_tv_migrated_v1','1'); } } catch(e){}
   const save = () => { try { localStorage.setItem('lcdus', JSON.stringify(state)); } catch(e){} };
 
   // ---------- charts ----------
@@ -618,12 +625,57 @@ function smcAnalyze(d, L, livePrice) {
     if (ws){ ws.onclose = null; ws.onmessage = null; try { ws.close(); } catch(e){} ws = null; }
   }
 
+  // ---------- TradingView Advanced Chart (free embed; no API key) ----------
+  const TV_INTERVAL = { '1m':'1', '5m':'5', '15m':'15', '1h':'60', '4h':'240', '1d':'D' };
+  function tradingViewSymbol(sym){
+    const clean = String(sym || 'XAUUSD').toUpperCase().replace('/', '');
+    if (clean === 'XAUUSD') return 'OANDA:XAUUSD';
+    if (clean === 'XAGUSD') return 'OANDA:XAGUSD';
+    return clean.includes(':') ? clean : clean;
+  }
+  function renderTradingView(){
+    const host = $('tvChart');
+    if (!host) return;
+    host.innerHTML = '';
+    const shell = document.createElement('div');
+    shell.className = 'tradingview-widget-container';
+    shell.style.width = '100%'; shell.style.height = '100%';
+    const widget = document.createElement('div');
+    widget.className = 'tradingview-widget-container__widget';
+    widget.style.width = '100%'; widget.style.height = '100%';
+    const note = document.createElement('div');
+    note.className = 'tradingview-widget-copyright';
+    note.style.cssText = 'font-size:11px;text-align:center;color:#7e8a9a;padding:2px';
+    const link = document.createElement('a');
+    link.href = 'https://www.tradingview.com/'; link.target = '_blank'; link.rel = 'noopener';
+    link.textContent = 'Chart by TradingView'; note.appendChild(link);
+    const script = document.createElement('script');
+    script.type = 'text/javascript'; script.async = true;
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+    script.text = JSON.stringify({
+      autosize: true,
+      symbol: tradingViewSymbol(state.symbol),
+      interval: TV_INTERVAL[state.tf] || '5',
+      timezone: 'Asia/Bangkok',
+      theme: 'dark',
+      style: '1',
+      locale: 'en',
+      allow_symbol_change: true,
+      calendar: false,
+      support_host: 'https://www.tradingview.com'
+    });
+    shell.append(widget, note, script); host.appendChild(shell);
+    $('stxt').textContent = 'กราฟจาก TradingView · ' + tradingViewSymbol(state.symbol);
+    $('dot').className = 'live';
+  }
+
   async function load(){
+    renderTradingView();
     const my = ++gen;
     closeWS(); clearInterval(tickerTimer); noRetry = false;
     loadDrawings();
     if (isGold(state.symbol)) return loadGold(my);
-    if (!cred.key || !cred.secret){ setStatus('err','ยังไม่ได้ใส่ API Key'); openKey(); return; }
+    if (!cred.key || !cred.secret){ setStatus('live','กราฟ TradingView · ไม่ต้องใช้ API Key'); return; }
     setStatus('wait','กำลังโหลดข้อมูล');
     try {
       const start = new Date(Date.now() - DAYS[state.tf]*864e5).toISOString();
@@ -1235,7 +1287,7 @@ function smcAnalyze(d, L, livePrice) {
     $('hl').textContent = '';
   }
   async function loadGold(my){
-    if (!cred.td){ setStatus('err', 'ทองคำต้องใช้ Twelve Data API Key'); openKey(); return; }
+    if (!cred.td){ setStatus('live', 'กราฟ TradingView · ไม่ต้องใช้ Twelve Data API Key'); return; }
     setStatus('wait', 'กำลังโหลดข้อมูลทองคำ');
     try {
       const j = await tdFetch(`time_series?symbol=${encodeURIComponent(tdSym(state.symbol))}&interval=${TDI[state.tf]}&outputsize=1000&timezone=UTC&order=ASC`);
@@ -1596,7 +1648,7 @@ function smcAnalyze(d, L, livePrice) {
   function showView(id){
     ['vChart','vScr','vGold','vFav'].forEach(v => $(v).hidden = v !== id);
     $('nav').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === id));
-    if (id === 'vChart') setTimeout(() => window.dispatchEvent(new Event('resize')), 30);
+    if (id === 'vChart') setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 80);
     if (id === 'vFav') loadFavs();
     if (id === 'vGold') goldDash(false);
   }
