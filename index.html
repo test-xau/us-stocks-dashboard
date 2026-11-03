@@ -20,7 +20,7 @@
   html,body{height:100%;margin:0}
   body{background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI","Noto Sans Thai",sans-serif;display:flex;flex-direction:column}
   button,input,select{font:inherit;color:inherit}
-  header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+  header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line)}
   .sym{display:flex;gap:6px;align-items:center}
   .sym input,.sym select,.tools select{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
   .sym input{width:110px;text-transform:uppercase}
@@ -30,7 +30,7 @@
   .btn:disabled{opacity:.4;cursor:default}
   .btn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .tfs{display:flex;gap:4px}
-  .tfs .btn{padding:5px 9px}
+  .tfs .btn{padding:3px 7px;font-size:12px}
   .btn.on{background:var(--accent);color:#14110a;border-color:var(--accent);font-weight:600}
   .price{display:flex;align-items:baseline;gap:12px;margin-left:auto}
   #last{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
@@ -40,11 +40,16 @@
   #status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mute)}
   #dot{width:8px;height:8px;border-radius:50%;background:var(--mute)}
   #dot.live{background:var(--up)} #dot.err{background:var(--down)} #dot.wait{background:var(--accent)}
-  .tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:6px 14px;border-bottom:1px solid var(--line);background:var(--bg)}
-  .grp{color:var(--mute);font-size:12px;min-width:54px}
-  .chk{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
-  .sw{width:10px;height:10px;border-radius:2px;display:inline-block}
-  .dtools{display:flex;flex-wrap:wrap;gap:6px}
+  /* Compact technical toolbar: reduce vertical space so the TradingView chart is larger */
+  .tools{display:flex;flex-wrap:wrap;align-items:center;gap:3px 10px;padding:3px 10px;border-bottom:1px solid var(--line);background:var(--bg);min-height:30px}
+  .grp{color:var(--mute);font-size:10px;min-width:38px;font-weight:700;letter-spacing:.2px}
+  .chk{display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none;font-size:11px;line-height:1.2;padding:2px 1px}
+  .chk input{width:13px;height:13px;margin:0}
+  .sw{width:8px;height:8px;border-radius:2px;display:inline-block}
+  .dtools{display:flex;flex-wrap:wrap;gap:4px}
+  .tools .btn{padding:3px 7px;font-size:11px;border-radius:5px}
+  .tools select{padding:2px 5px;font-size:11px;height:25px}
+  #drawTools .draw-help{font-size:11px;color:var(--mute);padding:2px 4px}
   #wrap{flex:1;min-height:0;display:flex;flex-direction:column}
   .panel{position:relative;min-height:0;border-top:1px solid var(--line)}
   .panel:first-child{border-top:0}
@@ -110,7 +115,17 @@
   .ni{display:none;font-style:normal}
   #toolsBtn{display:none}
   #nav .cnt{font-weight:400}
+  @media (min-width:761px){
+    #nav button{padding:7px 13px;font-size:13px}
+    .sym .btn{padding:4px 8px;font-size:12px}
+    .sym input{padding:4px 7px;font-size:12px}
+  }
   @media (max-width:760px){
+    .tools{gap:3px 8px;padding:4px 8px}
+    .grp{min-width:32px;font-size:10px}
+    .chk{font-size:10px}
+    .tools .btn{padding:3px 6px;font-size:10px}
+    #drawTools .draw-help{white-space:normal;line-height:1.3}
     body{height:100dvh}
     #nav{order:99;border-top:1px solid var(--line);border-bottom:0;padding:0 0 env(safe-area-inset-bottom);justify-content:space-around}
     #nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 2px;font-size:11px;border-bottom:0;border-top:2px solid transparent}
@@ -215,21 +230,7 @@
 
 <div class="tools" id="drawTools">
   <span class="grp">วาดกราฟ</span>
-  <div class="dtools">
-    <button class="btn" data-tool="select">เลือก</button>
-    <button class="btn" data-tool="hline">เส้นแนวนอน</button>
-    <button class="btn" data-tool="trend">เทรนด์ไลน์</button>
-    <button class="btn" data-tool="fib">Fib Retracement</button>
-    <button class="btn" data-tool="fibext">Fib Extension</button>
-    <button class="btn" data-tool="pos">Long/Short R:R</button>
-  </div>
-  <label class="chk"><input type="checkbox" id="magnet">Magnet (ดูด OHLC)</label>
-  <div class="dtools">
-    <button class="btn" id="delSel" disabled>ลบที่เลือก</button>
-    <button class="btn" id="undo">ย้อนกลับ</button>
-    <button class="btn" id="clearAll">ล้างทั้งหมด</button>
-  </div>
-  <span class="stat" id="hint"></span>
+  <span class="draw-help">ใช้แถบเครื่องมือด้านซ้ายภายในกราฟ TradingView เพื่อวาด Trend Line, Horizontal Line, Fibonacci Retracement / Extension และ Long / Short Position</span>
 </div>
 
 
@@ -665,6 +666,7 @@ function smcAnalyze(d, L, livePrice) {
       allow_symbol_change: true,
       calendar: false,
       hide_side_toolbar: false,
+      hide_top_toolbar: false,
       withdateranges: true,
       studies: ['STD;Volume', 'STD;RSI', 'STD;MACD'],
       support_host: 'https://www.tradingview.com'
