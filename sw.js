@@ -1,6 +1,6 @@
 // Service worker: เก็บตัวแอป (shell) ไว้ในเครื่องเพื่อเปิดเร็วและเปิดได้แม้ออฟไลน์ ส่วนราคาดึงสดจากอินเทอร์เน็ตเสมอ
 // เปลี่ยนเลข CACHE ทุกครั้งที่แก้ไฟล์ เพื่อให้มือถือรับเวอร์ชันใหม่
-const CACHE = 'us-stocks-v2-tradingview';
+const CACHE = 'us-stocks-v3-ictlab';
 const CDN = 'https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', CDN];
 self.addEventListener('install', e => {
