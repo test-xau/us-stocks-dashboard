@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ทอง ICT Live</title><style>*{box-sizing:border-box}html,body{margin:0;height:100%}
+:root{--bg:#0d1117;--panel:#131a23;--line:#232c38;--mute:#7c8898;--accent:#e9b949;--up:#2ebd9b;--down:#ef5b5b}
+body{background:var(--bg);color:#e8edf5;font:13px system-ui,"Noto Sans Thai",sans-serif;padding-top:env(safe-area-inset-top)}
+#vLab{height:100dvh;display:flex;flex-direction:column}
+.btn{background:var(--panel);color:#e8edf5;border:1px solid var(--line);border-radius:6px;cursor:pointer}
+.btn.on{border-color:var(--accent);color:var(--accent)}
+.stat{color:var(--mute)}.chk{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.up{color:var(--up)}.down{color:var(--down)}</style></head><body>
+<div id="vLab">
+<style>
+  .labbar{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--bg)}
+  .labbar input[type=text]{width:100px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 7px;text-transform:uppercase}
+  .labbar .tf{display:flex;gap:4px;overflow-x:auto}
+  .labbar .btn{padding:3px 8px;font-size:12px}
+  #labBody{flex:1;min-height:0;display:flex;gap:0}
+  #labChart{position:relative;flex:1;min-width:0;min-height:360px}
+  #labOv{position:absolute;left:0;top:0;pointer-events:none;z-index:4}
+  #labPanel{width:270px;flex:none;overflow:auto;padding:10px 12px;border-left:1px solid var(--line);background:var(--panel);font-size:12px;line-height:1.45}
+  @media (max-width:760px){ #labBody{flex-direction:column} #labPanel{width:auto;max-height:38%;border-left:0;border-top:1px solid var(--line)} }
+</style>
+<div class="labbar" id="labBar">
+  <input type="text" id="labSym" list="labSyms" aria-label="สัญลักษณ์" spellcheck="false"><datalist id="labSyms"><option value="XAUUSD"><option value="BTCUSDT"><option value="ETHUSDT"></datalist><button class="btn" id="labGo">โหลด</button>
+  <div class="tf" id="labTfs"></div>
+  <label class="chk"><input type="checkbox" data-k="sess">Killzone</label>
+  <label class="chk"><input type="checkbox" data-k="qt">QT (Q1-Q4)</label>
+  <label class="chk"><input type="checkbox" data-k="crt">CRT</label>
+  <label class="chk"><input type="checkbox" data-k="swp">Liquidity Sweep</label>
+  <label class="chk"><input type="checkbox" data-k="smc">OB / FVG / BOS</label>
+  <label class="chk"><input type="checkbox" data-k="plan">Entry · SL · TP</label>
+  <span class="stat" id="labMsg">เปิดแท็บเพื่อโหลดข้อมูล</span>
+</div>
+<div id="labBody"><div id="labChart"><canvas id="labOv"></canvas></div><div id="labPanel"></div></div>
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script>if(!window.LightweightCharts){document.write('<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"><\/script>');}</script>
+<script>
+function atrCalc(d, p) {
+  p = p || 14;
+  const out = new Array(d.length).fill(null);
+  if (d.length <= p) return out;
+  let sum = 0, a = null;
+  for (let i = 1; i < d.length; i++) {
+    const t = Math.max(d[i].high - d[i].low, Math.abs(d[i].high - d[i-1].close), Math.abs(d[i].low - d[i-1].close));
+    if (i <= p) { sum += t; if (i === p) { a = sum / p; out[i] = a; } }
+    else { a = (a * (p - 1) + t) / p; out[i] = a; }
+  }
+  return out;
+}
+
+// pick TP candidates from swing levels, require R:R >= 1.5
+function smcTargets(dir, entry, risk, swH, swL) {
+  const c = dir === 1
+    ? swH.filter(s => s.price > entry).map(s => s.price).sort((x, y) => x - y)
+    : swL.filter(s => s.price < entry).map(s => s.price).sort((x, y) => y - x);
+  const ok = c.filter(p => Math.abs(p - entry) / risk >= 1.5);
+  if (!ok.length) return null;
+  const tp1 = ok[0];
+  const far = ok.filter(p => Math.abs(p - tp1) >= 0.5 * risk)[0];
+  const tp2 = far !== undefined ? far
+    : (dir === 1 ? Math.max(entry + 3 * risk, tp1 + risk) : Math.min(entry - 3 * risk, tp1 - risk));
+  return { tp1, tp2 };
+}
+
+// d: CLOSED candles only. L: swing length. livePrice: current price.
+function smcAnalyze(d, L, livePrice) {
+  const n = d.length;
+  const R = { events: [], obs: [], fvgs: [], eq: [], sr: [], signals: [], range: null, trend: 0, atr: 0, plan: null,
+              stats: { win: 0, loss: 0, open: 0, r: 0 } };
+  if (n < L * 2 + 30) return R;
+
+  const H = d.map(c => c.high), Lo = d.map(c => c.low), C = d.map(c => c.close);
+  const atr = atrCalc(d, 14);
+  let A = atr[n-1] || (H[n-1] - Lo[n-1]) || 1;
+  R.atr = A;
+
+  const sufH = new Array(n + 1).fill(-Infinity), sufL = new Array(n + 1).fill(Infinity);
+  for (let i = n - 1; i >= 0; i--) { sufH[i] = Math.max(H[i], sufH[i+1]); sufL[i] = Math.min(Lo[i], sufL[i+1]); }
+
+  let top = null, bot = null, trend = 0, lastH = null, lastL = null;
+  const swH = [], swL = [], obs = [], fvgs = [], events = [], signals = [];
+
+  for (let j = 0; j < n; j++) {
+    const a = atr[j] || A;
+
+    // 1) confirm swing pivot at p = j - L
+    const p = j - L;
+    if (p >= L) {
+      let isH = true, isL = true;
+      for (let k = p - L; k <= p + L; k++) {
+        if (k === p) continue;
+        if (k < p) { if (H[k] >= H[p]) isH = false; if (Lo[k] <= Lo[p]) isL = false; }
+        else       { if (H[k] >  H[p]) isH = false; if (Lo[k] <  Lo[p]) isL = false; }
+      }
+      if (isH) { const s = { idx: p, price: H[p], crossed: false }; swH.push(s); top = s; lastH = s; }
+      if (isL) { const s = { idx: p, price: Lo[p], crossed: false }; swL.push(s); bot = s; lastL = s; }
+    }
+
+    // 2) mitigation (close through the zone)
+    for (const o of obs) {
+      if (!o.active || o.born >= j) continue;
+      if (o.dir === 1 ? C[j] < o.bottom : C[j] > o.top) { o.active = false; o.mit = j; }
+    }
+    for (const g of fvgs) {
+      if (!g.active || g.idx + 1 >= j) continue;
+      if (g.dir === 1 ? C[j] < g.bottom : C[j] > g.top) { g.active = false; g.mit = j; }
+    }
+
+    // 3) structure breaks (close beyond swing) -> BOS / CHoCH + order block
+    if (top && !top.crossed && C[j] > top.price) {
+      top.crossed = true;
+      events.push({ type: trend === -1 ? 'CHoCH' : 'BOS', dir: 1, from: top.idx, to: j, price: top.price });
+      trend = 1;
+      let mi = top.idx;
+      for (let k = top.idx; k <= j; k++) if (Lo[k] < Lo[mi]) mi = k;
+      obs.push({ dir: 1, top: H[mi], bottom: Lo[mi], idx: mi, born: j, active: true, signaled: false });
+    }
+    if (bot && !bot.crossed && C[j] < bot.price) {
+      bot.crossed = true;
+      events.push({ type: trend === 1 ? 'CHoCH' : 'BOS', dir: -1, from: bot.idx, to: j, price: bot.price });
+      trend = -1;
+      let mi = bot.idx;
+      for (let k = bot.idx; k <= j; k++) if (H[k] > H[mi]) mi = k;
+      obs.push({ dir: -1, top: H[mi], bottom: Lo[mi], idx: mi, born: j, active: true, signaled: false });
+    }
+
+    // 4) fair value gaps
+    if (j >= 2) {
+      if (Lo[j] > H[j-2] && (Lo[j] - H[j-2]) > 0.15 * a)
+        fvgs.push({ dir: 1, top: Lo[j], bottom: H[j-2], idx: j - 1, active: true });
+      else if (H[j] < Lo[j-2] && (Lo[j-2] - H[j]) > 0.15 * a)
+        fvgs.push({ dir: -1, top: Lo[j-2], bottom: H[j], idx: j - 1, active: true });
+    }
+
+    // 5) entry signals: price taps an unmitigated OB in the direction of structure and closes back out
+    if (trend !== 0 && lastH && lastL && lastH.price > lastL.price) {
+      const eq = (lastH.price + lastL.price) / 2;
+      for (const o of obs) {
+        if (!o.active || o.signaled || o.dir !== trend || o.born >= j) continue;
+        let ok = false;
+        if (trend === 1)  ok = Lo[j] <= o.top && C[j] > o.top && C[j] <= eq;       // discount only
+        if (trend === -1) ok = H[j] >= o.bottom && C[j] < o.bottom && C[j] >= eq;  // premium only
+        if (!ok) continue;
+        const entry = C[j];
+        const sl = trend === 1 ? o.bottom - 0.25 * a : o.top + 0.25 * a;
+        const risk = Math.abs(entry - sl);
+        if (!(risk > 0)) continue;
+        const t = smcTargets(trend, entry, risk, swH, swL);
+        if (!t) continue;
+        o.signaled = true;
+        signals.push({ idx: j, dir: trend, entry, sl, tp1: t.tp1, tp2: t.tp2, rr: Math.abs(t.tp1 - entry) / risk });
+      }
+    }
+  }
+
+  // outcome of every signal (SL checked first when both are hit in one bar = conservative)
+  for (const s of signals) {
+    s.res = 'open';
+    for (let k = s.idx + 1; k < n; k++) {
+      const hitSL = s.dir === 1 ? Lo[k] <= s.sl : H[k] >= s.sl;
+      const hitTP = s.dir === 1 ? H[k] >= s.tp1 : Lo[k] <= s.tp1;
+      if (hitSL) { s.res = 'loss'; s.end = k; break; }
+      if (hitTP) { s.res = 'win';  s.end = k; break; }
+    }
+    if (s.res === 'win') { R.stats.win++; R.stats.r += s.rr; }
+    else if (s.res === 'loss') { R.stats.loss++; R.stats.r -= 1; }
+    else R.stats.open++;
+  }
+  R.signals = signals.slice(-20);
+
+  R.trend = trend;
+  R.events = events.slice(-14);
+  R.obs = obs.filter(o => o.active && o.dir === 1).slice(-4).concat(obs.filter(o => o.active && o.dir === -1).slice(-4));
+  R.fvgs = fvgs.filter(g => g.active && g.dir === 1).slice(-5).concat(fvgs.filter(g => g.active && g.dir === -1).slice(-5));
+  if (lastH && lastL && lastH.price > lastL.price) R.range = { hi: lastH, lo: lastL };
+
+  // equal highs / equal lows that have not been swept yet
+  const tol = 0.25 * A;
+  const scan = (sw, isHigh) => {
+    const arr = sw.slice(-30), found = [];
+    for (let k = arr.length - 1; k >= 1 && found.length < 3; k--) {
+      for (let i = k - 1; i >= Math.max(0, k - 10); i--) {
+        if (arr[k].idx - arr[i].idx < L * 2) continue;
+        if (Math.abs(arr[k].price - arr[i].price) > tol) continue;
+        const lvl = isHigh ? Math.max(arr[k].price, arr[i].price) : Math.min(arr[k].price, arr[i].price);
+        const swept = isHigh ? sufH[arr[i].idx + 1] > lvl : sufL[arr[i].idx + 1] < lvl;
+        if (swept) continue;
+        if (found.some(f => Math.abs(f.price - lvl) < tol / 2)) continue;
+        found.push({ dir: isHigh ? 1 : -1, price: lvl, i1: arr[i].idx, i2: arr[k].idx });
+        break;
+      }
+    }
+    return found;
+  };
+  R.eq = scan(swH, true).concat(scan(swL, false));
+
+  // support / resistance = clusters of swing points touched at least twice
+  const price = livePrice != null ? livePrice : C[n-1];
+  const pts = swH.slice(-40).map(s => s.price).concat(swL.slice(-40).map(s => s.price)).sort((x, y) => x - y);
+  const clusters = [];
+  for (const pr of pts) {
+    const last = clusters[clusters.length - 1];
+    if (last && pr - last.max <= 0.5 * A) { last.sum += pr; last.n++; last.max = pr; }
+    else clusters.push({ sum: pr, n: 1, max: pr });
+  }
+  const levels = clusters.map(c => ({ price: c.sum / c.n, touches: c.n })).filter(l => l.touches >= 2);
+  const above = levels.filter(l => l.price > price).sort((x, y) => x.price - y.price).slice(0, 3).map(l => ({ ...l, kind: 'R' }));
+  const below = levels.filter(l => l.price <= price).sort((x, y) => y.price - x.price).slice(0, 3).map(l => ({ ...l, kind: 'S' }));
+  R.sr = above.concat(below);
+
+  // trade plan: an open signal (recent) or a pending setup at the nearest OB
+  const open = signals.filter(s => s.res === 'open' && n - 1 - s.idx <= 100).pop();
+  if (open) {
+    R.plan = { kind: 'signal', dir: open.dir, entry: open.entry, sl: open.sl, tp1: open.tp1, tp2: open.tp2, rr: open.rr, start: open.idx };
+  } else if (trend !== 0) {
+    const cand = obs.filter(o => o.active && o.dir === trend && (trend === 1 ? o.bottom < price : o.top > price));
+    if (cand.length) {
+      const o = trend === 1 ? cand.reduce((m, x) => x.top > m.top ? x : m) : cand.reduce((m, x) => x.bottom < m.bottom ? x : m);
+      const entry = trend === 1 ? Math.min(o.top, price) : Math.max(o.bottom, price);
+      const sl = trend === 1 ? o.bottom - 0.25 * A : o.top + 0.25 * A;
+      const risk = Math.abs(entry - sl);
+      if (risk > 0) {
+        const t = smcTargets(trend, entry, risk, swH, swL);
+        if (t) R.plan = { kind: 'pending', dir: trend, entry, sl, tp1: t.tp1, tp2: t.tp2, rr: Math.abs(t.tp1 - entry) / risk,
+                          start: n, inZone: price <= o.top && price >= o.bottom };
+      }
+    }
+  }
+  return R;
+}
+</script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const TFS = ['1m','5m','15m','1h','4h','1d'];
+const ST = {'1m':60,'5m':300,'15m':900,'1h':3600,'4h':14400,'1d':86400};
+const HTF = {'1m':900,'5m':3600,'15m':14400,'1h':86400,'4h':604800,'1d':604800};
+const HN = {900:'M15',3600:'H1',14400:'H4',86400:'D1',604800:'W1'};
+const BKK = 7*3600, UP = '#2ebd9b', DOWN = '#ef5b5b', AMB = '#e9b949';
+const QN = ['','Q1 สะสม','Q2 หลอก','Q3 กระจาย','Q4 ต่อเนื่อง'], QC = ['','142,107,216','239,91,91','46,189,155','233,185,73'];
+const SC = {ASIA:'142,107,216', LON:'77,163,255', NY:'233,185,73'};
+const S = { sym:'XAUUSD', tf:'15m', sess:1, qt:1, crt:1, swp:1, smc:1, plan:1 };
+try { Object.assign(S, JSON.parse(localStorage.getItem('lcdlab') || '{}')); } catch(e){}
+const save = () => { try { localStorage.setItem('lcdlab', JSON.stringify(S)); } catch(e){} };
+let ws = null, lastAn = 0, chart, ser, cv, x, C = [], R = null, SW = [], H = [], CR = [], M = null, rev = 0, lastSig = '', gen = 0, dec = 2;
+const off = () => 0;
+const hr = u => (u % 86400) / 3600;
+const qOf = u => { const h = hr(u); return (h >= 23 || h < 5) ? 1 : h < 11 ? 2 : h < 17 ? 3 : 4; };
+const kzOf = u => { const h = hr(u); return h < 5 ? 'ASIA' : (h >= 7 && h < 10) ? 'LON' : (h >= 12 && h < 15) ? 'NY' : ''; };
+const fmt = v => v == null ? '-' : Number(v).toLocaleString('en-US', { minimumFractionDigits:dec, maximumFractionDigits:dec });
+const status = t => { $('labMsg').textContent = t; };
+
+// ---------- data (Binance public market data: ไม่ต้องใช้ API key) ----------
+const MAP = { XAUUSD:'PAXGUSDT', GOLD:'PAXGUSDT' };   // ทอง = PAXG (โทเคนทองคำ ราคาใกล้เคียงทอง spot)
+async function fetchData(){
+  const sym = MAP[S.sym] || S.sym;
+  const r = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${encodeURIComponent(sym)}&interval=${S.tf}&limit=1000`);
+  if (!r.ok) throw new Error(r.status === 400 ? `ไม่พบ ${S.sym} บน Binance (ใช้คู่ USDT เช่น BTCUSDT, ETHUSDT, XAUUSD)` : 'HTTP ' + r.status);
+  return (await r.json()).map(k => ({ u:Math.floor(k[0] / 1000), open:+k[1], high:+k[2], low:+k[3], close:+k[4] }));
+}
+
+// ---------- analysis ----------
+const bid = (u, s) => s === 604800 ? Math.floor((u + off() - 345600) / 604800) : Math.floor((u + off()) / s);
+function buildHTF(s){
+  const o = []; let cur = null;
+  C.forEach((c, i) => {
+    const b = bid(c.u, s);
+    if (b !== cur){ cur = b; o.push({ i0:i, i1:i, open:c.open, high:c.high, low:c.low, close:c.close }); }
+    else { const h = o[o.length-1]; h.i1 = i; h.high = Math.max(h.high, c.high); h.low = Math.min(h.low, c.low); h.close = c.close; }
+  });
+  return o;
+}
+function crtScan(h){
+  const o = [];
+  for (let k = 1; k < h.length; k++){
+    const a = h[k-1], b = h[k], forming = k === h.length - 1;
+    if (b.high > a.high && b.close < a.high && b.close > a.low) o.push({ dir:-1, a, b, k, forming, tgt:a.low });
+    else if (b.low < a.low && b.close > a.low && b.close < a.high) o.push({ dir:1, a, b, k, forming, tgt:a.high });
+  }
+  return o;
+}
+function sweepScan(){
+  const L = 5, out = [], n = C.length;
+  for (let p = Math.max(L, n - 400); p < n - L; p++){
+    let ph = true, pl = true;
+    for (let k = 1; k <= L; k++){
+      if (C[p].high <= C[p-k].high || C[p].high < C[p+k].high) ph = false;
+      if (C[p].low >= C[p-k].low || C[p].low > C[p+k].low) pl = false;
+    }
+    for (const [isH, ok] of [[true, ph], [false, pl]]){
+      if (!ok) continue; const lv = isH ? C[p].high : C[p].low;
+      for (let j = p + L + 1; j < Math.min(n, p + L + 150); j++){
+        if (!(isH ? C[j].high > lv : C[j].low < lv)) continue;
+        if ([0,1,2].some(d => C[j+d] && (isH ? C[j+d].close < lv : C[j+d].close > lv))) out.push({ p, j, lv, isH });
+        break;
+      }
+    }
+  }
+  return out.sort((a, b) => a.j - b.j).slice(-8);
+}
+function modelTrade(){
+  const n = C.length, last = C[n-1], m = H.length, s = HTF[S.tf], hn = HN[s];
+  const rec = CR.filter(c => c.k >= m - 3).pop();
+  let bias = 0, nt = 'ข้อมูลไม่พอ';
+  if (rec){ bias = rec.dir; nt = `CRT ${hn}: ${rec.dir === 1 ? 'กวาด Low แล้วปิดกลับกรอบ → เป้า High' : 'กวาด High แล้วปิดกลับกรอบ → เป้า Low'}`; }
+  else if (m > 1){ const a = H[m-2]; bias = a.close > (a.high + a.low) / 2 ? 1 : -1; nt = `ยังไม่มี CRT · เอนตามแท่ง ${hn} ก่อนหน้า (ปิด${bias === 1 ? 'เหนือ' : 'ใต้'} 50%)`; }
+  const sw = SW.filter(v => v.j >= n - 60 && (bias === 1 ? !v.isH : v.isH)).pop();
+  const ev = R && sw ? R.events.filter(e => e.dir === bias && e.to >= sw.j).pop() : null;
+  const fact = { ok:!!(sw && ev), t: sw ? `${sw.isH ? 'BSL' : 'SSL'} ถูกกวาด` + (ev ? ` + ${ev.type} ยืนยันทิศ` : ' · รอ CHoCH/MSS') : 'ยังไม่เห็นการกวาด liquidity ฝั่งตรงข้ามทิศ' };
+  const mid = R && R.range ? (R.range.hi.price + R.range.lo.price) / 2 : null;
+  const al = [
+    [['LON','NY'].includes(kzOf(last.u)), 'อยู่ใน Killzone'],
+    [mid != null && (bias === 1 ? last.close < mid : last.close > mid), bias === 1 ? 'ราคาอยู่โซน Discount' : 'ราคาอยู่โซน Premium'],
+    [[2,3].includes(qOf(last.u)), `QT อยู่ ${QN[qOf(last.u)]}`],
+    [!!R && R.obs.concat(R.fvgs).some(z => z.dir === bias), 'มี OB/FVG ตามทิศ']
+  ];
+  const cnt = al.filter(v => v[0]).length;
+  const p = R && R.plan && R.plan.dir === bias ? R.plan : null;
+  return { bias, nt, fact, al, cnt, plan:p };
+}
+function analyze(){
+  if (C.length < 60){ R = null; return; }
+  R = smcAnalyze(C.slice(0, -1), 5, C[C.length-1].close);
+  SW = sweepScan(); H = buildHTF(HTF[S.tf]); CR = crtScan(H); M = modelTrade();
+  const row = (ok, t) => `<div style="display:flex;gap:6px"><span style="color:${ok ? UP : 'var(--mute)'}">${ok ? '✓' : '○'}</span><span>${t}</span></div>`;
+  const b = M.bias;
+  $('labPanel').innerHTML =
+    `<b>Model Trade · ${S.sym} ${S.tf}</b>` +
+    `<div style="margin:6px 0 2px;color:var(--accent);font-weight:600">1 Narrative <span class="${b === 1 ? 'up' : b === -1 ? 'down' : ''}">${b === 1 ? 'Bullish' : b === -1 ? 'Bearish' : '-'}</span></div><div class="stat">${M.nt}</div>` +
+    `<div style="margin:6px 0 2px;color:var(--accent);font-weight:600">2 Fact</div>${row(M.fact.ok, M.fact.t)}` +
+    `<div style="margin:6px 0 2px;color:var(--accent);font-weight:600">3 Alignment ${M.cnt}/4</div>${M.al.map(v => row(v[0], v[1])).join('')}` +
+    `<div style="margin:6px 0 2px;color:var(--accent);font-weight:600">4 Model Trade</div>` +
+    (M.plan ? row(true, `${M.plan.dir === 1 ? 'LONG' : 'SHORT'} Entry ${fmt(M.plan.entry)} · SL ${fmt(M.plan.sl)} · TP1 ${fmt(M.plan.tp1)}`) : row(false, 'ยังไม่มีแผนเข้าที่ตรงทิศ Narrative')) +
+    `<div class="stat" style="margin-top:6px">${M.fact.ok && M.cnt >= 3 && M.plan ? 'เงื่อนไขครบ — ตรวจ Risk ก่อนเข้า' : 'ยังไม่ครบเงื่อนไข — รอ'}</div>` +
+    `<div class="stat" style="margin-top:4px;font-size:10px">เครื่องมือช่วยอ่านกราฟ ไม่ใช่คำแนะนำลงทุน · Killzone/QT ใช้เวลา UTC ไม่ปรับ DST</div>`;
+}
+
+// ---------- drawing ----------
+function paint(){
+  if (!chart || !C.length) return;
+  const wrap = $('labChart'), cw = wrap.clientWidth, ch = wrap.clientHeight, dpr = window.devicePixelRatio || 1;
+  if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)){ cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); cv.style.width = cw + 'px'; cv.style.height = ch + 'px'; }
+  x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, cw, ch);
+  const T = chart.timeScale(), vr = T.getVisibleLogicalRange(); if (!vr) return;
+  const pw = T.width(), ph = ch - T.height();
+  const X = i => T.logicalToCoordinate(i), Y = p => ser.priceToCoordinate(p);
+  const rect = (x1, y1, x2, y2, f, s) => { if ([x1,y1,x2,y2].some(v => v == null)) return; const l = Math.min(x1,x2), t = Math.min(y1,y2), w = Math.abs(x2-x1), h = Math.abs(y2-y1); if (f){ x.fillStyle = f; x.fillRect(l,t,w,h); } if (s){ x.strokeStyle = s; x.lineWidth = 1; x.strokeRect(l+.5,t+.5,w,h); } };
+  const seg = (x1, y1, x2, y2, c, d, w) => { if ([x1,y1,x2,y2].some(v => v == null)) return; x.beginPath(); x.setLineDash(d || []); x.strokeStyle = c; x.lineWidth = w || 1; x.moveTo(x1,y1); x.lineTo(x2,y2); x.stroke(); x.setLineDash([]); };
+  const txt = (t, px, py, c, al) => { if (px == null || py == null) return; x.font = '11px system-ui,"Noto Sans Thai",sans-serif'; x.textBaseline = 'middle'; x.textAlign = al || 'left'; x.fillStyle = c; x.fillText(t, px, py); };
+  x.save(); x.beginPath(); x.rect(0, 0, pw, ph); x.clip();
+  const a = Math.max(0, Math.floor(vr.from)), b = Math.min(C.length - 1, Math.ceil(vr.to));
+  const runs = fn => { const r = []; let s = -1, k = null; for (let i = a; i <= b + 1; i++){ const v = i <= b ? fn(C[i].u) : null; if (v !== k){ if (k) r.push([s, i - 1, k]); s = i; k = v; } } return r; };
+  if (ST[S.tf] <= 3600){
+    if (S.sess) runs(kzOf).forEach(([i0, i1, k]) => { rect(X(i0 - .5), 0, X(i1 + .5), ph, `rgba(${SC[k]},.09)`); txt(k === 'LON' ? 'London KZ' : k === 'NY' ? 'New York KZ' : 'Asia', Math.max(2, X(i0 - .5)) + 3, 24, `rgba(${SC[k]},1)`); });
+    if (S.qt) runs(qOf).forEach(([i0, i1, k]) => { rect(X(i0 - .5), 0, X(i1 + .5), 12, `rgba(${QC[k]},.55)`); txt(QN[k], Math.max(2, X(i0 - .5)) + 3, 7, '#fff'); });
+  }
+  if (S.smc && R){
+    for (const g of R.fvgs){ const c = g.dir === 1 ? '77,163,255' : '198,120,221', x0 = X(g.idx); rect(x0, Y(g.top), pw, Y(g.bottom), `rgba(${c},.13)`, `rgba(${c},.35)`); txt('FVG', x0 + 3, Math.min(Y(g.top), Y(g.bottom)) + 8, `rgb(${c})`); }
+    for (const o of R.obs){ const c = o.dir === 1 ? '46,189,155' : '239,91,91', x0 = X(o.idx); rect(x0, Y(o.top), pw, Y(o.bottom), `rgba(${c},.16)`, `rgba(${c},.6)`); txt(o.dir === 1 ? 'Bull OB' : 'Bear OB', x0 + 3, Math.min(Y(o.top), Y(o.bottom)) + 8, `rgb(${c})`); }
+    for (const e of R.events){ const y = Y(e.price), c = e.dir === 1 ? UP : DOWN; seg(X(e.from), y, X(e.to), y, c, [5,4]); txt(e.type, (X(e.from) + X(e.to)) / 2, y + (e.dir === 1 ? -8 : 8), e.type === 'CHoCH' ? AMB : c, 'center'); }
+  }
+  if (S.swp) for (const s of SW){ const y = Y(s.lv), x2 = X(s.j); seg(X(s.p), y, x2, y, AMB, [2,3]); txt(s.isH ? 'BSL swept ✕' : 'SSL swept ✕', x2, y + (s.isH ? -9 : 9), AMB, 'center'); }
+  if (S.crt && H.length > 1){
+    const ref = H[H.length - 2], xr = X(ref.i0), hn = HN[HTF[S.tf]];
+    rect(xr, Y(ref.high), pw, Y(ref.low), 'rgba(77,163,255,.05)');
+    seg(xr, Y(ref.high), pw, Y(ref.high), 'rgba(77,163,255,.9)', null, 1.5); seg(xr, Y(ref.low), pw, Y(ref.low), 'rgba(77,163,255,.9)', null, 1.5);
+    seg(xr, Y((ref.high + ref.low) / 2), pw, Y((ref.high + ref.low) / 2), 'rgba(77,163,255,.6)', [4,4]);
+    txt(`CRT ${hn} High`, pw - 4, Y(ref.high) - 8, '#4da3ff', 'right'); txt(`CRT ${hn} Low`, pw - 4, Y(ref.low) + 8, '#4da3ff', 'right'); txt('50%', pw - 4, Y((ref.high + ref.low) / 2) - 8, 'rgba(77,163,255,.8)', 'right');
+    for (const c of CR.slice(-3)){
+      const col = c.dir === 1 ? UP : DOWN, xs = X(c.b.i0), xe = X(c.b.i1 + .5);
+      txt(`CRT ${c.dir === 1 ? '↑' : '↓'}${c.forming ? ' (กำลังก่อตัว)' : ''}`, xs, Y(c.dir === 1 ? c.b.low : c.b.high) + (c.dir === 1 ? 12 : -12), col);
+      seg(xe, Y(c.tgt), pw, Y(c.tgt), col, [6,4]); txt('เป้า CRT', pw - 4, Y(c.tgt) + (c.dir === 1 ? -8 : 8), col, 'right');
+    }
+  }
+  if (S.plan && M && M.plan){
+    const p = M.plan, x1 = X(p.start), bw = (X(10) - X(0)) / 10, x2 = x1 + 16 * bw;
+    rect(x1, Y(p.entry), x2, Y(p.sl), 'rgba(239,91,91,.16)'); rect(x1, Y(p.entry), x2, Y(p.tp1), 'rgba(46,189,155,.15)'); rect(x1, Y(p.tp1), x2, Y(p.tp2), 'rgba(46,189,155,.08)');
+    seg(x1, Y(p.entry), x2, Y(p.entry), '#e8edf5', [4,3]); seg(x1, Y(p.sl), x2, Y(p.sl), DOWN, null, 1.5); seg(x1, Y(p.tp1), x2, Y(p.tp1), UP, null, 1.5); seg(x1, Y(p.tp2), x2, Y(p.tp2), UP, [5,4]);
+    txt(`${p.dir === 1 ? 'LONG' : 'SHORT'} ${fmt(p.entry)}`, x2 - 3, Y(p.entry) - 8, '#e8edf5', 'right'); txt(`SL ${fmt(p.sl)}`, x2 - 3, Y(p.sl) + (p.dir === 1 ? 8 : -8), DOWN, 'right'); txt(`TP1 ${fmt(p.tp1)}`, x2 - 3, Y(p.tp1) + (p.dir === 1 ? -8 : 8), UP, 'right');
+  }
+  x.restore();
+}
+function loop(){
+  if (chart && !$('vLab').hidden){
+    const r = chart.timeScale().getVisibleLogicalRange(), w = $('labChart');
+    let sig = rev + '|' + w.clientWidth + 'x' + w.clientHeight; if (r) sig += '|' + r.from.toFixed(2) + '|' + r.to.toFixed(2);
+    if (C.length){ const c = C[C.length - 1].close; sig += '|' + ser.priceToCoordinate(c) + '|' + ser.priceToCoordinate(c * 1.01); }
+    if (sig !== lastSig){ lastSig = sig; paint(); }
+  }
+  requestAnimationFrame(loop);
+}
+
+// ---------- ui ----------
+function init(){
+  if (chart) return;
+  chart = LightweightCharts.createChart($('labChart'), { autoSize:true, layout:{ background:{ color:'#0d1117' }, textColor:'#97a3b3' }, grid:{ vertLines:{ color:'#18202a' }, horzLines:{ color:'#18202a' } },
+    rightPriceScale:{ borderColor:'#232c38', minimumWidth:72 }, timeScale:{ borderColor:'#232c38', timeVisible:true, secondsVisible:false, rightOffset:6 } });
+  ser = chart.addCandlestickSeries({ upColor:UP, downColor:DOWN, wickUpColor:UP, wickDownColor:DOWN, borderVisible:false });
+  cv = $('labOv'); x = cv.getContext('2d');
+  const tb = $('labTfs');
+  TFS.forEach(tf => { const bt = document.createElement('button'); bt.className = 'btn'; bt.textContent = tf; bt.dataset.tf = tf; bt.onclick = () => { S.tf = tf; save(); sync(); load(); }; tb.appendChild(bt); });
+  $('labBar').addEventListener('change', e => { const k = e.target.dataset.k; if (!k) return; S[k] = e.target.checked ? 1 : 0; save(); analyze(); rev++; });
+  const go = () => { const v = $('labSym').value.trim().toUpperCase().replace('/', ''); if (v){ S.sym = v; save(); load(); } };
+  $('labGo').onclick = go; $('labSym').addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  sync(); requestAnimationFrame(loop);
+}
+function sync(){
+  $('labSym').value = S.sym;
+  $('labTfs').querySelectorAll('.btn').forEach(b => b.classList.toggle('on', b.dataset.tf === S.tf));
+  $('labBar').querySelectorAll('[data-k]').forEach(i => i.checked = !!S[i.dataset.k]);
+}
+async function load(){
+  const my = ++gen; status('กำลังโหลด…');
+  try {
+    const arr = await fetchData(); if (my !== gen) return;
+    const seen = new Set();
+    C = arr.filter(c => c.u && !seen.has(c.u) && seen.add(c.u)).sort((p, q) => p.u - q.u).slice(-1500).map(c => ({ ...c, time:c.u + BKK }));
+    if (!C.length) throw new Error('ไม่พบข้อมูลของ ' + S.sym);
+    dec = C[C.length-1].close >= 1 ? 2 : 4;
+    ser.applyOptions({ priceFormat:{ type:'price', precision:dec, minMove:Math.pow(10, -dec) } });
+    ser.setData(C.map(c => ({ time:c.time, open:c.open, high:c.high, low:c.low, close:c.close })));
+    analyze();
+    const n = C.length; chart.timeScale().setVisibleLogicalRange({ from:Math.max(0, n - 150), to:n + 8 });
+    rev++; status(`${S.sym} ${S.tf} · ${n} แท่ง · เวลาไทย`); live();
+  } catch(e){ if (my === gen) status('โหลดไม่สำเร็จ: ' + e.message); }
+}
+// ---------- realtime (Binance WebSocket, ไม่ต้องใช้ API key) ----------
+function live(){
+  if (ws){ try { ws.close(); } catch(e){} ws = null; }
+  const my = gen, pair = (MAP[S.sym] || S.sym).toLowerCase();
+  let sock;
+  try { sock = ws = new WebSocket(`wss://data-stream.binance.vision/ws/${pair}@kline_${S.tf}`); } catch(e){ return; }
+  sock.onmessage = ev => {
+    if (my !== gen || !C.length) return;
+    let k; try { k = JSON.parse(ev.data).k; } catch(e){ return; } if (!k) return;
+    const u = Math.floor(k.t / 1000), c = { u, time:u + BKK, open:+k.o, high:+k.h, low:+k.l, close:+k.c }, last = C[C.length - 1];
+    if (u === last.u) C[C.length - 1] = c; else if (u > last.u) C.push(c); else return;
+    ser.update({ time:c.time, open:c.open, high:c.high, low:c.low, close:c.close });
+    const now = Date.now(); if (now - lastAn > 1500){ lastAn = now; analyze(); }
+    rev++; status(`● LIVE ${S.sym} ${S.tf} · ${fmt(c.close)} · เวลาไทย`);
+  };
+  sock.onclose = () => { if (sock === ws && my === gen) setTimeout(() => { if (sock === ws && my === gen) live(); }, 3000); };
+}
+window.addEventListener('labshow', () => { init(); if (!C.length) load(); setTimeout(() => window.dispatchEvent(new Event('resize')), 60); });
+})();
+
+</script>
+<script>
+if (window.LightweightCharts) window.dispatchEvent(new Event('labshow'));
+else document.getElementById('labMsg').textContent = 'โหลดไลบรารีกราฟไม่สำเร็จ (jsdelivr/unpkg อาจถูกบล็อก)';
+</script></body></html>
