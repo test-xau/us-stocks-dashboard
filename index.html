@@ -158,13 +158,12 @@
 </head>
 <body>
 <nav id="nav">
-  <button data-v="vChart" class="on"><i class="ni">📈</i><span>กราฟ</span></button>
-  <button data-v="vScr"><i class="ni">🔍</i><span>คัดหุ้น</span></button>
-  <button data-v="vGold"><i class="ni">🥇</i><span>ทองคำ</span></button>
-  <button data-v="vLab"><i class="ni">🧪</i><span>ICT Lab</span></button>
+  <button data-v="vLab" class="on"><i class="ni">🥇</i><span>ทอง ICT</span></button>
+  <button data-v="vChart"><i class="ni">📈</i><span>กราฟ</span></button>
+  <button data-v="vGold"><i class="ni">📊</i><span>TradingView ทอง</span></button>
   <button data-v="vFav"><i class="ni">⭐</i><span>รายการโปรด<b class="cnt" id="favCnt">0</b></span></button>
 </nav>
-<div class="view" id="vChart">
+<div class="view" id="vChart" hidden>
 <header>
   <div class="sym">
     <input id="symbol" list="symbols" value="XAUUSD" aria-label="ชื่อย่อหุ้น" spellcheck="false">
@@ -249,17 +248,6 @@
 
 </div>
 
-<div class="view pg" id="vScr" hidden><div class="pgin">
-  <h2>คัดหุ้น Swing Trade (1-3 เดือน)</h2>
-  <div class="stat">ใส่ชื่อย่อหุ้นที่มีโมเมนตัมขาขึ้น คั่นด้วยคอมมา ระบบดึงราคารายวันจาก Alpaca เทียบกับ SPY แล้วจัดอันดับ เลือก 2 ตัวที่ดีที่สุด</div>
-  <div class="row2"><textarea id="scrIn" rows="2" spellcheck="false" placeholder="PLTR, CELH, AMD, NET"></textarea><button class="btn on" id="scrGo">คัดหุ้น</button></div>
-  <div id="scrOut"></div>
-  <details open><summary>Prompt: Hedge Fund Swing Trader (สำหรับวิเคราะห์ Catalyst / Short Interest ต่อ)</summary>
-    <textarea id="scrPrompt" rows="14" readonly></textarea>
-    <div class="row2"><button class="btn" id="copyP">คัดลอก prompt</button><span class="stat" id="copyMsg"></span></div>
-  </details>
-</div></div>
-
 <div class="view pg" id="vGold" hidden><div class="pgin">
   <h2>Dashboard ทองคำ <span class="stat">กราฟจาก TradingView · ไม่ต้องใช้ API Key</span></h2>
   <div class="row2" style="align-items:center">
@@ -299,7 +287,7 @@
   @media (max-width:760px){ #labBody{flex-direction:column} #labPanel{width:auto;max-height:38%;border-left:0;border-top:1px solid var(--line)} }
 </style>
 <div class="labbar" id="labBar">
-  <input type="text" id="labSym" aria-label="สัญลักษณ์" spellcheck="false"><button class="btn" id="labGo">โหลด</button>
+  <input type="text" id="labSym" list="labSyms" aria-label="สัญลักษณ์" spellcheck="false"><datalist id="labSyms"><option value="XAUUSD"><option value="BTCUSDT"><option value="ETHUSDT"></datalist><button class="btn" id="labGo">โหลด</button>
   <div class="tf" id="labTfs"></div>
   <label class="chk"><input type="checkbox" data-k="sess">Killzone</label>
   <label class="chk"><input type="checkbox" data-k="qt">QT (Q1-Q4)</label>
@@ -531,9 +519,11 @@ function smcAnalyze(d, L, livePrice) {
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script>if(!window.LightweightCharts){document.write('<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"><\/script>');}</script>
 <script id="app">
 (() => {
-  const $ = id => document.getElementById(id);
+  // ถ้า element ไม่มีในหน้า (เช่นปุ่มวาดกราฟเดิมที่ถูกแทนด้วย TradingView) ให้ใช้ตัวแทนว่าง แทนที่จะ error แล้วทำให้ทั้งแอปหยุด
+  const $ = id => document.getElementById(id) || document.createElement('span');
   const TFS = ['1m','5m','15m','1h','4h','1d'];
   const STEP = { '1m':60, '5m':300, '15m':900, '1h':3600, '4h':14400, '1d':86400 };
   const state = {
@@ -1628,35 +1618,7 @@ function smcAnalyze(d, L, livePrice) {
     state.symbol = gd.sym; state.tf = tf; save(); syncUI(); showView('vChart'); load(); refreshStar();
   });
 
-  // ================= tabs / favorites / screener =================
-  const PROMPT = `คุณคือ "Hedge Fund Swing Trader" มืออาชีพที่เชี่ยวชาญการทำกำไรระยะสั้น-กลาง (1-3 เดือน) ในตลาดหุ้นสหรัฐฯ โดยเน้นกลยุทธ์ Trend Following และ Catalyst Trading
-
-นี่คือรายชื่อหุ้นสหรัฐฯ ที่มีโมเมนตัมขาขึ้นแข็งแกร่งในปัจจุบัน: [ {{T}} ]
-
-จงวิเคราะห์หุ้นเหล่านี้อย่างเข้มข้นเพื่อค้นหาหุ้นที่ดีที่สุด 2 ตัวสำหรับการเข้าซื้อแบบ Swing Trade โดยใช้หลักเกณฑ์ต่อไปนี้:
-
-1. Institutional Accumulation & Volume Structure
-- วิเคราะห์ว่าในช่วง 2-4 สัปดาห์ที่ผ่านมา มีสัญญาณการเก็บหุ้นของสถาบัน (Institutional Buying) หรือไม่ โดยดูจากวอลุ่มในวันที่ราคาปิดเขียวเข้ม (Heavy Volume on Up Days) เทียบกับวันพักตัว
-- หุ้นตัวไหนมีลักษณะ "Low Float" หรือ "High Short Interest" ที่มีโอกาสเกิด Short Squeeze หากมีปัจจัยบวกเข้ามาหนุน?
-
-2. Near-term Catalysts Within 30-90 Days
-- ตรวจสอบวันประกาศผลประกอบการ (Earnings Call) หรือการประชุมสัมมนาใหญ่ (Industry Conferences) ที่กำลังจะเกิดขึ้นในอีก 1-3 เดือนข้างหน้า
-- หุ้นตัวไหนมีประวัติการ "Earnings Beat" (งบดีกว่าคาด) และมักจะเกิด Price Gap-Up หลังงบออก?
-
-3. Technical Setup & Relative Strength
-- ประเมินโครงสร้างราคา (Price Action) ว่าตัวไหนกำลังทำแพทเทิร์นสร้างฐานเพื่อไปต่อ เช่น Bull Flag, Cup and Handle, หรือ Volatility Contraction Pattern (VCP)
-- วิเคราะห์ Relative Strength (RS) เทียบกับ S&P 500 ในช่วงที่ตลาดพักฐาน หุ้นตัวไหนแข็งแกร่งไม่ยอมลงตามตลาด?
-
-4. Tactical Trade Setup (Action Plan)
-โปรดสรุปแผนการเทรดที่ชัดเจน (Actionable Plan) สำหรับหุ้นที่เลือกในรูปแบบตารางดังนี้:
-- Ticker (ชื่อหุ้น)
-- Setup Rationale (เหตุผลทางเทคนิคและ Catalyst)
-- Ideal Entry Zone (โซนรับที่ปลอดภัย/จุด Buy Breakout)
-- Profit Target (เป้าหมายทำกำไรภายใน 1-3 เดือน อิงตามแนวต้านสำคัญ)
-- Hard Stop Loss (จุดตัดขาดทุนที่ต้องยอม เพื่อรักษาเงินทุน)
-
-โปรดให้คำแนะนำที่เด็ดขาด ตรงไปตรงมาแบบนักเทรดมืออาชีพ ไม่ต้องเกริ่นอารัมภบท`;
-
+  // ================= tabs / favorites =================
   const lsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch(e){ return d; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
   let favs = lsGet('lcdus_fav', []);
@@ -1665,7 +1627,7 @@ function smcAnalyze(d, L, livePrice) {
   const pct = x => (x >= 0 ? '+' : '') + x.toFixed(1) + '%';
 
   function showView(id){
-    ['vChart','vScr','vGold','vFav','vLab'].forEach(v => $(v).hidden = v !== id);
+    ['vChart','vGold','vFav','vLab'].forEach(v => $(v).hidden = v !== id);
     $('nav').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === id));
     if (id === 'vChart') setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 80);
     if (id === 'vFav') loadFavs();
@@ -1685,7 +1647,6 @@ function smcAnalyze(d, L, livePrice) {
     if (!favs.includes(sym) && alerts[sym]){ delete alerts[sym]; lsSet('lcdus_al', alerts); syncSrv(); }
     lsSet('lcdus_fav', favs); refreshStar();
     if (!$('vFav').hidden) loadFavs();
-    document.querySelectorAll('#scrOut .star').forEach(b => { const on = favs.includes(b.dataset.s); b.textContent = on ? '★' : '☆'; b.classList.toggle('on', on); });
   }
   $('favBtn').onclick = () => toggleFav(state.symbol);
 
@@ -1719,102 +1680,6 @@ function smcAnalyze(d, L, livePrice) {
   $('favAdd').onclick = addFav;
   $('favIn').addEventListener('keydown', e => { if (e.key === 'Enter') addFav(); });
 
-  // ---- screener tab ----
-  async function dailyBars(sym){
-    const start = new Date(Date.now() - 430 * 864e5).toISOString();
-    const r = await fetch(`${HOST}${encodeURIComponent(sym)}/bars?timeframe=1Day&start=${encodeURIComponent(start)}&limit=1000&sort=asc&adjustment=split&feed=${cred.feed}`, { headers: hdr() });
-    if (!r.ok) throw new Error(sym + ' (HTTP ' + r.status + ')');
-    return (await r.json()).bars || [];
-  }
-  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
-  const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
-
-  function scoreStock(sym, b, spy){
-    const n = b.length; if (n < 120) return null;
-    const C = b.map(x => x.c), H = b.map(x => x.h), L = b.map(x => x.l), V = b.map(x => x.v);
-    const e20 = ema(C, 20)[n-1], e50 = ema(C, 50)[n-1], e200 = ema(C, 200)[n-1];
-    const tr = b.map((x, i) => i ? Math.max(x.h - x.l, Math.abs(x.h - C[i-1]), Math.abs(x.l - C[i-1])) / C[i-1] : 0);
-    const atr = atrCalc(b.map(x => ({ high: x.h, low: x.l, close: x.c })), 14)[n-1] || C[n-1] * 0.03;
-    // 1) accumulation, last 20 sessions
-    let up = 0, dn = 0, heavy = 0; const v50 = avg(V.slice(-70, -20));
-    for (let i = n - 20; i < n; i++){
-      if (C[i] >= C[i-1]) up += V[i]; else dn += V[i];
-      if (C[i] > C[i-1] * 1.02 && V[i] > 1.5 * v50) heavy++;
-    }
-    const ud = up / Math.max(dn, 1);
-    // 2) relative strength vs SPY
-    const sm = new Map(spy.map(x => [x.t.slice(0, 10), x.c]));
-    const ret63 = (C[n-1] / C[n-64] - 1) * 100;
-    const sp63 = spy.length > 64 ? (spy[spy.length-1].c / spy[spy.length-64].c - 1) * 100 : 0;
-    const edge = [];
-    for (let i = n - 60; i < n; i++){
-      const d = b[i].t.slice(0, 10), pd = b[i-1].t.slice(0, 10);
-      if (sm.has(d) && sm.has(pd)){ const mr = sm.get(d) / sm.get(pd) - 1; if (mr < -0.002) edge.push((C[i] / C[i-1] - 1 - mr) * 100); }
-    }
-    const downEdge = avg(edge);
-    // 3) setup: volatility contraction + near high
-    const contr = avg(tr.slice(-10)) / Math.max(avg(tr.slice(-50, -10)), 1e-9);
-    const hi52 = Math.max(...H.slice(-252)), near = C[n-1] / hi52;
-    const score = clamp((ud - 0.8) / 0.9, 0, 1) * 24 + Math.min(heavy, 3) * 2
-      + clamp((ret63 - sp63) / 25, 0, 1) * 20 + clamp(downEdge / 1, 0, 1) * 10
-      + (C[n-1] > e20 ? 5 : 0) + (e20 > e50 ? 5 : 0) + (e200 && e50 > e200 ? 5 : 0)
-      + clamp((1.1 - contr) / 0.5, 0, 1) * 12 + clamp((near - 0.8) / 0.18, 0, 1) * 13;
-    const tags = [];
-    if (ud >= 1.3) tags.push('Accumulation'); if (heavy >= 2) tags.push('Heavy-vol up');
-    if (ret63 - sp63 > 5) tags.push('RS นำ SPY'); if (downEdge > 0.3) tags.push('ไม่ลงตามตลาด');
-    if (contr < 0.8) tags.push('VCP/ตีบแคบ'); if (near > 0.93) tags.push('ใกล้ high 52w');
-    // trade plan
-    const pivot = Math.max(...H.slice(-20)), entry = pivot * 1.002;
-    let stop = Math.min(...L.slice(-10)) - 0.25 * atr; if (entry - stop > 3 * atr) stop = entry - 3 * atr;
-    const risk = entry - stop, d = decimals(entry);
-    return { sym, entry, score, ud, heavy, rs: ret63 - sp63, downEdge, contr, near, tags, last: C[n-1], d,
-      zone: `${fmt(pivot, d)} – ${fmt(pivot + 0.5 * atr, d)} (Buy breakout) หรือรับย่อ ${fmt(e20, d)} – ${fmt(e20 + 0.5 * atr, d)}`,
-      t1: entry + 2 * risk, t2: entry + 3 * risk, stop, hi52,
-      why: `Up/Down vol ${ud.toFixed(2)}x, heavy-up ${heavy} วัน, RS 63 วัน ${pct(ret63 - sp63)} เทียบ SPY, ATR% ช่วง 10 วันล่าสุด ${(contr * 100).toFixed(0)}% ของช่วงก่อนหน้า, ราคา ${(near * 100).toFixed(0)}% ของ high 52 สัปดาห์` };
-  }
-
-  const buildPrompt = () => { const t = parseSyms($('scrIn').value); $('scrPrompt').value = PROMPT.replace('{{T}}', t.length ? t.join(', ') : 'ใส่ชื่อย่อหุ้น'); };
-  $('scrIn').value = lsGet('lcdus_scr', 'PLTR, CELH, AMD, NET');
-  $('scrIn').addEventListener('input', buildPrompt); buildPrompt();
-  $('copyP').onclick = async () => {
-    try { await navigator.clipboard.writeText($('scrPrompt').value); $('copyMsg').textContent = 'คัดลอกแล้ว'; }
-    catch(e){ $('scrPrompt').select(); $('copyMsg').textContent = 'เลือกข้อความแล้ว กด Ctrl+C'; }
-  };
-
-  let scrRes = [];
-  $('scrGo').onclick = async () => {
-    const syms = parseSyms($('scrIn').value).filter(x => x !== 'SPY'), out = $('scrOut');
-    if (!syms.length){ out.innerHTML = '<p class="stat">ใส่ชื่อย่อหุ้นอย่างน้อย 1 ตัว</p>'; return; }
-    if (!cred.key || !cred.secret){ out.innerHTML = '<p class="stat">ยังไม่ได้ใส่ API Key กดที่แท็บ "กราฟ" แล้วกดปุ่ม API Key</p>'; return; }
-    lsSet('lcdus_scr', $('scrIn').value); buildPrompt(); $('scrGo').disabled = true;
-    const res = [], bad = [];
-    try {
-      out.innerHTML = '<p class="stat">กำลังโหลด SPY...</p>';
-      const spy = await dailyBars('SPY');
-      for (let i = 0; i < syms.length; i++){
-        out.innerHTML = `<p class="stat">กำลังวิเคราะห์ ${syms[i]} (${i + 1}/${syms.length})...</p>`;
-        try { const r = scoreStock(syms[i], await dailyBars(syms[i]), spy); r ? res.push(r) : bad.push(syms[i]); } catch(e){ bad.push(syms[i]); }
-      }
-    } catch(e){ out.innerHTML = '<p class="down">โหลดไม่สำเร็จ: ' + e.message + '</p>'; $('scrGo').disabled = false; return; }
-    $('scrGo').disabled = false;
-    res.sort((a, b) => b.score - a.score); scrRes = res;
-    const star = s => `<button class="star${favs.includes(s) ? ' on' : ''}" data-s="${s}" title="รายการโปรด">${favs.includes(s) ? '★' : '☆'}</button>`;
-    const top = res.slice(0, 2);
-    out.innerHTML = '<table class="tbl"><tr><th>#</th><th></th><th>หุ้น</th><th>คะแนน</th><th>Up/Down Vol</th><th>RS vs SPY (63d)</th><th>สัญญาณ</th></tr>' +
-      res.map((r, i) => `<tr class="${i < 2 ? 'top' : ''}"><td>${i + 1}</td><td>${star(r.sym)}</td><td class="tk" data-o="${r.sym}">${r.sym}</td><td><i class="scorebar" style="width:${r.score * 0.6}px"></i>${r.score.toFixed(0)}</td><td>${r.ud.toFixed(2)}x</td><td class="${r.rs >= 0 ? 'up' : 'down'}">${pct(r.rs)}</td><td>${r.tags.map(t => `<span class="tag2">${t}</span>`).join('') || '-'}</td></tr>`).join('') + '</table>' +
-      (bad.length ? `<p class="stat">ข้ามเพราะดึงข้อมูลไม่ได้หรือข้อมูลไม่พอ: ${bad.join(', ')}</p>` : '') +
-      (top.length ? '<h3>Tactical Trade Setup: 2 อันดับแรก</h3><table class="tbl"><tr><th>Ticker</th><th>Setup Rationale</th><th>Ideal Entry Zone</th><th>Profit Target</th><th>Hard Stop Loss</th></tr>' +
-        top.map(r => `<tr><td class="tk" data-o="${r.sym}">${r.sym}<div class="stat">${fmt(r.last, r.d)}</div><button class="btn mini" data-al="${r.sym}" data-en="${r.entry.toFixed(r.d)}">🔔 ตั้งเตือน Entry</button></td><td>${r.why}<div class="stat">Catalyst / งบ / Short interest: ยังไม่ได้ตรวจ ให้ใช้ prompt ด้านล่าง</div></td><td>${r.zone}</td><td class="up">T1 ${fmt(r.t1, r.d)} (2R)<br>T2 ${fmt(r.t2, r.d)} (3R)<div class="stat">high 52w ${fmt(r.hi52, r.d)}</div></td><td class="down">${fmt(r.stop, r.d)}</td></tr>`).join('') + '</table>' : '') +
-      '<p class="warn">การจัดอันดับคำนวณจากราคาและวอลุ่มรายวันเท่านั้น (ข้อ 1 ส่วนวอลุ่ม และข้อ 3) ส่วน Catalyst, วันงบ, Float และ Short Interest ไม่มีในข้อมูล Alpaca ต้องใช้ prompt ด้านล่างกับ AI ที่ค้นเว็บได้ แผนเข้า-ออกเป็นสูตรอัตโนมัติ ไม่ใช่คำแนะนำการลงทุน</p>';
-  };
-  $('scrOut').addEventListener('click', e => {
-    if (e.target.dataset.al){
-      const s = e.target.dataset.al;
-      if (!favs.includes(s)){ favs.push(s); lsSet('lcdus_fav', favs); }
-      setAlert(s, +e.target.dataset.en); refreshStar(); e.target.textContent = 'ตั้งเตือนแล้ว ✓ (แก้ราคาได้ที่แท็บรายการโปรด)';
-    } else if (e.target.dataset.s) toggleFav(e.target.dataset.s);
-    else if (e.target.dataset.o) openChart(e.target.dataset.o);
-  });
   // ---- entry alerts ----
   let alerts = lsGet('lcdus_al', {}), thr = +lsGet('lcdus_thr', 1) || 1;
   function setAlert(sym, entry){
@@ -1902,41 +1767,27 @@ const TFS = ['1m','5m','15m','1h','4h','1d'];
 const ST = {'1m':60,'5m':300,'15m':900,'1h':3600,'4h':14400,'1d':86400};
 const HTF = {'1m':900,'5m':3600,'15m':14400,'1h':86400,'4h':604800,'1d':604800};
 const HN = {900:'M15',3600:'H1',14400:'H4',86400:'D1',604800:'W1'};
-const ALP = {'1m':'1Min','5m':'5Min','15m':'15Min','1h':'1Hour','4h':'4Hour','1d':'1Day'};
-const DAYS = {'1m':5,'5m':25,'15m':60,'1h':300,'4h':900,'1d':1500};
-const TDI = {'1m':'1min','5m':'5min','15m':'15min','1h':'1h','4h':'4h','1d':'1day'};
 const BKK = 7*3600, UP = '#2ebd9b', DOWN = '#ef5b5b', AMB = '#e9b949';
 const QN = ['','Q1 สะสม','Q2 หลอก','Q3 กระจาย','Q4 ต่อเนื่อง'], QC = ['','142,107,216','239,91,91','46,189,155','233,185,73'];
 const SC = {ASIA:'142,107,216', LON:'77,163,255', NY:'233,185,73'};
 const S = { sym:'XAUUSD', tf:'15m', sess:1, qt:1, crt:1, swp:1, smc:1, plan:1 };
 try { Object.assign(S, JSON.parse(localStorage.getItem('lcdlab') || '{}')); } catch(e){}
-try { if (!localStorage.getItem('lcdlab')) S.sym = (JSON.parse(localStorage.getItem('lcdus') || '{}').symbol) || S.sym; } catch(e){}
 const save = () => { try { localStorage.setItem('lcdlab', JSON.stringify(S)); } catch(e){} };
-let chart, ser, cv, x, C = [], R = null, SW = [], H = [], CR = [], M = null, rev = 0, lastSig = '', gen = 0, dec = 2;
-const isGold = () => /^X(AU|AG)USD$/.test(S.sym);
-const off = () => isGold() ? 7200 : 0;
+let ws = null, lastAn = 0, chart, ser, cv, x, C = [], R = null, SW = [], H = [], CR = [], M = null, rev = 0, lastSig = '', gen = 0, dec = 2;
+const off = () => 0;
 const hr = u => (u % 86400) / 3600;
 const qOf = u => { const h = hr(u); return (h >= 23 || h < 5) ? 1 : h < 11 ? 2 : h < 17 ? 3 : 4; };
 const kzOf = u => { const h = hr(u); return h < 5 ? 'ASIA' : (h >= 7 && h < 10) ? 'LON' : (h >= 12 && h < 15) ? 'NY' : ''; };
 const fmt = v => v == null ? '-' : Number(v).toLocaleString('en-US', { minimumFractionDigits:dec, maximumFractionDigits:dec });
 const status = t => { $('labMsg').textContent = t; };
 
-// ---------- data ----------
+// ---------- data (Binance public market data: ไม่ต้องใช้ API key) ----------
+const MAP = { XAUUSD:'PAXGUSDT', GOLD:'PAXGUSDT' };   // ทอง = PAXG (โทเคนทองคำ ราคาใกล้เคียงทอง spot)
 async function fetchData(){
-  let cred = {}; try { cred = JSON.parse(localStorage.getItem('lcdus_cred') || '{}'); } catch(e){}
-  if (isGold()){
-    if (!cred.td) throw new Error('ทองคำต้องใช้ Twelve Data API Key (ใส่ที่ปุ่ม API คัดหุ้น ในแท็บกราฟ)');
-    const r = await fetch(`https://api.twelvedata.com/time_series?symbol=${S.sym.slice(0,3)}/USD&interval=${TDI[S.tf]}&outputsize=1500&timezone=UTC&order=ASC&apikey=${encodeURIComponent(cred.td)}`);
-    const j = await r.json(); if (j.status === 'error' || !r.ok) throw new Error(j.message || 'HTTP ' + r.status);
-    return (j.values || []).map(v => { const d = v.datetime.length === 10 ? v.datetime + 'T00:00:00Z' : v.datetime.replace(' ', 'T') + 'Z';
-      return { u:Math.floor(Date.parse(d) / 1000), open:+v.open, high:+v.high, low:+v.low, close:+v.close }; });
-  }
-  if (!cred.key) throw new Error('หุ้นต้องใช้ Alpaca API Key (ใส่ที่ปุ่ม API คัดหุ้น ในแท็บกราฟ)');
-  const start = new Date(Date.now() - DAYS[S.tf] * 864e5).toISOString();
-  const r = await fetch(`https://data.alpaca.markets/v2/stocks/${encodeURIComponent(S.sym)}/bars?timeframe=${ALP[S.tf]}&start=${encodeURIComponent(start)}&limit=10000&sort=asc&adjustment=split&feed=${cred.feed || 'iex'}`,
-    { headers:{ 'APCA-API-KEY-ID':cred.key, 'APCA-API-SECRET-KEY':cred.secret } });
-  if (!r.ok) throw new Error('Alpaca HTTP ' + r.status);
-  return ((await r.json()).bars || []).map(b => ({ u:Math.floor(Date.parse(b.t) / 1000), open:b.o, high:b.h, low:b.l, close:b.c }));
+  const sym = MAP[S.sym] || S.sym;
+  const r = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${encodeURIComponent(sym)}&interval=${S.tf}&limit=1000`);
+  if (!r.ok) throw new Error(r.status === 400 ? `ไม่พบ ${S.sym} บน Binance (ใช้คู่ USDT เช่น BTCUSDT, ETHUSDT, XAUUSD)` : 'HTTP ' + r.status);
+  return (await r.json()).map(k => ({ u:Math.floor(k[0] / 1000), open:+k[1], high:+k[2], low:+k[3], close:+k[4] }));
 }
 
 // ---------- analysis ----------
@@ -2101,8 +1952,25 @@ async function load(){
     ser.setData(C.map(c => ({ time:c.time, open:c.open, high:c.high, low:c.low, close:c.close })));
     analyze();
     const n = C.length; chart.timeScale().setVisibleLogicalRange({ from:Math.max(0, n - 150), to:n + 8 });
-    rev++; status(`${S.sym} ${S.tf} · ${n} แท่ง · เวลาไทย`);
+    rev++; status(`${S.sym} ${S.tf} · ${n} แท่ง · เวลาไทย`); live();
   } catch(e){ if (my === gen) status('โหลดไม่สำเร็จ: ' + e.message); }
+}
+// ---------- realtime (Binance WebSocket, ไม่ต้องใช้ API key) ----------
+function live(){
+  if (ws){ try { ws.close(); } catch(e){} ws = null; }
+  const my = gen, pair = (MAP[S.sym] || S.sym).toLowerCase();
+  let sock;
+  try { sock = ws = new WebSocket(`wss://data-stream.binance.vision/ws/${pair}@kline_${S.tf}`); } catch(e){ return; }
+  sock.onmessage = ev => {
+    if (my !== gen || !C.length) return;
+    let k; try { k = JSON.parse(ev.data).k; } catch(e){ return; } if (!k) return;
+    const u = Math.floor(k.t / 1000), c = { u, time:u + BKK, open:+k.o, high:+k.h, low:+k.l, close:+k.c }, last = C[C.length - 1];
+    if (u === last.u) C[C.length - 1] = c; else if (u > last.u) C.push(c); else return;
+    ser.update({ time:c.time, open:c.open, high:c.high, low:c.low, close:c.close });
+    const now = Date.now(); if (now - lastAn > 1500){ lastAn = now; analyze(); }
+    rev++; status(`● LIVE ${S.sym} ${S.tf} · ${fmt(c.close)} · เวลาไทย`);
+  };
+  sock.onclose = () => { if (sock === ws && my === gen) setTimeout(() => { if (sock === ws && my === gen) live(); }, 3000); };
 }
 window.addEventListener('labshow', () => { init(); if (!C.length) load(); setTimeout(() => window.dispatchEvent(new Event('resize')), 60); });
 })();
@@ -2113,6 +1981,7 @@ window.addEventListener('labshow', () => { init(); if (!C.length) load(); setTim
     document.body.classList.toggle('tools-open');
     setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
   });
+  document.querySelector('#nav button[data-v="vLab"]').click();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
